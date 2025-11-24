@@ -19,9 +19,12 @@ const TypingEffect: React.FC<{ text: string; speed?: number }> = ({ text, speed 
 
   useEffect(() => {
     let index = 0;
+    setDisplayedText(''); // Reset on text change
+    
     const interval = setInterval(() => {
-      if (index < text.length - 1) { 
-        setDisplayedText((prev) => prev + text[index]);
+      // Fixed: logic was skipping the last character (length - 1)
+      if (index < text.length) { 
+        setDisplayedText((prev) => prev + text.charAt(index));
         index++;
       } else {
         clearInterval(interval);
@@ -69,10 +72,12 @@ const App: React.FC = () => {
       
       if (data) {
         setSiteConfig(data);
-        // Apply to document
-        document.title = data.site_title || 'YAPIM AŞAMASINDA';
+        // Apply ONLY to browser document title (Tab Title)
+        if (data.site_title) {
+            document.title = data.site_title;
+        }
         
-        // Update Meta Description
+        // Apply ONLY to Meta Description
         let metaDesc = document.querySelector('meta[name="description"]');
         if (!metaDesc) {
           metaDesc = document.createElement('meta');
@@ -101,15 +106,8 @@ const App: React.FC = () => {
     emailInputRef.current?.focus();
   };
 
-  // Helper to safely get title string
-  const getSafeTitle = () => {
-    if (siteConfig && typeof siteConfig.site_title === 'string' && siteConfig.site_title.length > 0) {
-      return siteConfig.site_title;
-    }
-    return "YAPIM AŞAMASINDA";
-  };
-  
-  const displayTitle = getSafeTitle();
+  // Static Title for the Visual H1
+  const displayTitle = "YAPIM AŞAMASINDA";
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden flex flex-col font-mono text-white selection:bg-white selection:text-black">
@@ -117,34 +115,35 @@ const App: React.FC = () => {
       <BouncingPlanets />
 
       {/* Navigation / Header */}
-      <header className="relative z-50 p-6 flex justify-between items-center border-b border-white/10 backdrop-blur-sm">
-        <div className="flex items-center gap-6">
+      <header className="relative z-50 p-4 md:p-6 flex justify-between items-center border-b border-white/10 backdrop-blur-sm">
+        <div className="flex items-center gap-3 md:gap-6">
           <div 
             className="flex items-center gap-2 cursor-pointer group"
             onClick={() => setCurrentView('home')}
           >
-            <div className="w-4 h-4 bg-white animate-pulse shadow-[0_0_10px_white] group-hover:bg-green-400 transition-colors" />
-            <span className="font-bold tracking-widest text-lg text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 group-hover:to-white transition-all">
+            <div className="w-3 h-3 md:w-4 md:h-4 bg-white animate-pulse shadow-[0_0_10px_white] group-hover:bg-green-400 transition-colors" />
+            <span className="font-bold tracking-widest text-sm md:text-lg text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 group-hover:to-white transition-all whitespace-nowrap">
               KARAKURAN.COM
             </span>
           </div>
           
           <button 
             onClick={() => setCurrentView('blog')}
-            className={`text-xs tracking-widest px-3 py-1 border transition-all flex items-center gap-2 ${currentView === 'blog' ? 'bg-white text-black border-white' : 'border-white/20 hover:border-white text-gray-400 hover:text-white'}`}
+            className={`text-[10px] md:text-xs tracking-widest px-2 py-1 md:px-3 border transition-all flex items-center gap-1 md:gap-2 ${currentView === 'blog' ? 'bg-white text-black border-white' : 'border-white/20 hover:border-white text-gray-400 hover:text-white'}`}
           >
-             <span>//</span> BLOG
+             <span className="hidden md:inline">//</span> BLOG
           </button>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           <div className="hidden md:block text-[10px] text-gray-500 font-mono">
-            {siteConfig?.site_title ? `SYS_CFG: ${siteConfig.site_title.substring(0, 15)}...` : 'SYS_DEFAULT'}
+             {/* Removed dynamic text from header to prevent clutter, kept static system status */}
+             SYS_STATUS: ONLINE
           </div>
           
           <button 
             onClick={() => setCurrentView('panel')}
-            className={`text-xs tracking-widest px-4 py-2 border transition-all font-bold ${currentView === 'panel' ? 'bg-green-500 text-black border-green-500' : 'border-green-900 text-green-500 hover:bg-green-900/20'}`}
+            className={`text-[10px] md:text-xs tracking-widest px-2 py-1 md:px-4 md:py-2 border transition-all font-bold whitespace-nowrap ${currentView === 'panel' ? 'bg-green-500 text-black border-green-500' : 'border-green-900 text-green-500 hover:bg-green-900/20'}`}
           >
             [ PANEL ]
           </button>
@@ -158,9 +157,9 @@ const App: React.FC = () => {
           /* LANDING PAGE CONTENT */
           <div className="max-w-4xl w-full text-center space-y-12 relative z-10 animate-in fade-in zoom-in duration-500">
             
-            {/* Glitch Title */}
+            {/* Glitch Title - HARDCODED as requested */}
             <div className="relative inline-block mb-4 group select-none">
-              <h1 className="relative z-10 text-4xl md:text-6xl lg:text-8xl font-black font-['Syncopate'] tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+              <h1 className="relative z-10 text-3xl sm:text-4xl md:text-6xl lg:text-8xl font-black font-['Syncopate'] tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
                 {displayTitle.split(' ').map((word, i) => (
                   <span key={i} className="block md:inline-block mr-4">{word}</span>
                 ))}
@@ -191,9 +190,9 @@ const App: React.FC = () => {
               `}</style>
             </div>
 
-            {/* DOS Typing Effect */}
+            {/* DOS Typing Effect - HARDCODED string for stability */}
             <div>
-              <TypingEffect text={siteConfig?.site_description || "SİSTEM YÜKLENİYOR... %85"} />
+              <TypingEffect text="SİSTEM YÜKLENİYOR... %85" speed={80} />
             </div>
 
             {/* 3D Element */}
@@ -263,7 +262,7 @@ const App: React.FC = () => {
                 <span className={`w-2 h-2 rounded-full animate-pulse ${currentView === 'panel' ? 'bg-red-500' : 'bg-green-500'}`}></span>
                 Sistem: {currentView === 'home' ? 'ONLINE' : currentView === 'panel' ? 'YÖNETİCİ MODU' : 'OKUMA MODU'}
             </span>
-            <span>{siteConfig?.footer_text || 'Bölge: TR-ISTANBUL'}</span>
+            <span className="hidden sm:inline">{siteConfig?.footer_text || 'Bölge: TR-ISTANBUL'}</span>
         </div>
         <div className="animate-pulse text-white font-bold">
             /// {currentView === 'home' ? 'BEKLEMEDE' : 'AKTARIM SÜRÜYOR'} ///
