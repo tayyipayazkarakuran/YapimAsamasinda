@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { marked } from 'marked';
-import { BlogPost, SiteConfig } from '../types';
+import { BlogPost, SiteConfig, Page, Category, Comment } from '../types';
 
 // --- SUPABASE CONFIGURATION ---
 const SUPABASE_URL = 'https://cjztgxndnfjdvzlfhvxt.supabase.co'; 
@@ -13,23 +13,169 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 interface BlogSystemProps {
   onBack: () => void;
   mode: 'public' | 'admin';
+  placeholderComponent?: React.ReactNode;
 }
 
 marked.use({ breaks: true, gfm: true });
 
+// --- CUSTOM RETRO STYLES FOR MARKDOWN CONTENT ---
+const RetroMarkdownStyles = () => (
+  <style>{`
+    .retro-content {
+      font-family: 'Space Mono', monospace;
+      color: #e5e5e5;
+    }
+    
+    /* Headings */
+    .retro-content h1, .retro-content h2, .retro-content h3 {
+      font-family: 'Syncopate', sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-top: 2em;
+      margin-bottom: 0.8em;
+      color: #fff;
+      border-bottom: 1px solid #333;
+      padding-bottom: 0.2em;
+    }
+    .retro-content h1 { font-size: 1.8em; border-bottom: 2px solid #fff; }
+    .retro-content h2 { font-size: 1.4em; color: #4ade80; border-bottom: 1px dashed #4ade80; }
+    .retro-content h3 { font-size: 1.1em; color: #ccc; }
+
+    /* Paragraphs & Lists */
+    .retro-content p { margin-bottom: 1.5em; line-height: 1.8; }
+    .retro-content ul { list-style: square; padding-left: 1.5em; margin-bottom: 1.5em; color: #aaa; }
+    .retro-content ol { list-style: decimal; padding-left: 1.5em; margin-bottom: 1.5em; color: #aaa; }
+    .retro-content li { margin-bottom: 0.5em; }
+
+    /* Links */
+    .retro-content a {
+      color: #4ade80;
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    .retro-content a:hover {
+      background: #4ade80;
+      color: #000;
+    }
+
+    /* Blockquotes - System Alert Style */
+    .retro-content blockquote {
+      border-left: 4px solid #4ade80;
+      background: rgba(74, 222, 128, 0.05);
+      padding: 1rem;
+      margin: 2rem 0;
+      font-style: italic;
+      color: #a3a3a3;
+      position: relative;
+    }
+    .retro-content blockquote:before {
+      content: '>> SYSTEM_NOTE:';
+      display: block;
+      font-size: 0.7em;
+      font-weight: bold;
+      color: #4ade80;
+      margin-bottom: 0.5rem;
+    }
+
+    /* Code Blocks - Terminal Style */
+    .retro-content pre {
+      background: #000;
+      border: 1px solid #333;
+      padding: 1rem;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+    }
+    .retro-content code {
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+      color: #fff;
+    }
+    .retro-content p code {
+      background: #222;
+      padding: 0.2em 0.4em;
+      border-radius: 2px;
+      color: #4ade80;
+    }
+
+    /* Images - Frame Style */
+    .retro-content img {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid #fff;
+      padding: 4px;
+      margin: 2rem auto;
+      display: block;
+      filter: grayscale(100%); /* Retro feel */
+      transition: filter 0.3s;
+    }
+    .retro-content img:hover {
+      filter: grayscale(0%);
+    }
+
+    /* Tables - Data Grid Style */
+    .retro-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 2rem 0;
+      font-size: 0.9em;
+    }
+    .retro-content th {
+      border: 1px solid #444;
+      padding: 12px;
+      text-align: left;
+      background: #111;
+      color: #4ade80;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .retro-content td {
+      border: 1px solid #333;
+      padding: 12px;
+      color: #ccc;
+    }
+    .retro-content tr:nth-child(even) {
+      background: rgba(255,255,255,0.02);
+    }
+
+    /* Horizontal Rule */
+    .retro-content hr {
+      border: 0;
+      height: 1px;
+      background: #333;
+      margin: 3rem 0;
+      position: relative;
+    }
+    .retro-content hr:after {
+      content: '/// SECTION_BREAK ///';
+      position: absolute;
+      left: 50%;
+      top: -0.7em;
+      transform: translateX(-50%);
+      background: #050505;
+      padding: 0 10px;
+      font-size: 0.6em;
+      color: #555;
+    }
+  `}</style>
+);
+
 // --- HELPER: Async Markdown Renderer ---
-// Prevents [object Object] errors by handling the Promise returned by marked.parse
 const MarkdownRenderer: React.FC<{ content: string; className?: string }> = ({ content, className }) => {
   const [html, setHtml] = useState('');
 
   useEffect(() => {
-    // Wrap in promise resolve to handle both sync and async return types of marked
     Promise.resolve(marked.parse(content || '')).then((parsed) => {
       setHtml(parsed as string);
     });
   }, [content]);
 
-  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <>
+      <RetroMarkdownStyles />
+      <div className={`retro-content ${className || ''}`} dangerouslySetInnerHTML={{ __html: html }} />
+    </>
+  );
 };
 
 // --- SUB-COMPONENTS ---
@@ -54,12 +200,15 @@ const ConfigWarning: React.FC = () => (
   <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center p-8">
     <div className="border-2 border-red-500 p-8 max-w-2xl text-center font-mono">
       <h1 className="text-3xl text-red-500 font-bold mb-4 animate-pulse">SİSTEM HATASI</h1>
-      <p className="text-white mb-6">Veritabanı bağlantı bilgileri eksik.</p>
+      <p className="text-white mb-6">Veritabanı bağlantı bilgileri eksik veya tablo bulunamadı.</p>
+      <p className="text-gray-500 text-xs">Admin panelinde 'VERİTABANI' sekmesine giderek gerekli SQL kodlarını alabilirsiniz.</p>
     </div>
   </div>
 );
 
-// 1. Settings Editor (System Config)
+// --- ADMIN SUB-COMPONENTS ---
+
+// 1. Settings Editor
 const SettingsEditor: React.FC = () => {
   const [config, setConfig] = useState<SiteConfig>({
     site_title: '',
@@ -81,8 +230,7 @@ const SettingsEditor: React.FC = () => {
     setDbError(null);
     const { data, error } = await supabase.from('site_settings').select('*').single();
     if (error) {
-       console.error("Fetch Error:", error);
-       if (error.code !== 'PGRST116') { // PGRST116 is 'no rows', which is fine for first run
+       if (error.code !== 'PGRST116') {
          setDbError(error.message);
        }
     }
@@ -95,13 +243,8 @@ const SettingsEditor: React.FC = () => {
     setSaving(true);
     setDbError(null);
     
-    // Check if exists first to update or insert
-    const { data: existing, error: fetchError } = await supabase.from('site_settings').select('id').single();
-    
-    // If the table doesn't exist, this usually throws an error here or on insert
-    if (fetchError && fetchError.code !== 'PGRST116') {
-        // likely table missing
-    }
+    // First, check if settings exist
+    const { data: existing } = await supabase.from('site_settings').select('id').single();
     
     let error;
     if (existing) {
@@ -127,103 +270,71 @@ const SettingsEditor: React.FC = () => {
   return (
     <div className="max-w-2xl mx-auto border border-white/20 p-8 bg-black/50">
        <h3 className="font-['Syncopate'] text-2xl mb-6 border-b border-white/20 pb-4">SİSTEM YAPILANDIRMASI</h3>
-       
-       {dbError && (
-         <div className="bg-red-900/50 border border-red-500 p-4 mb-6 text-xs font-mono">
-            <h4 className="font-bold text-red-300 mb-2">VERİTABANI HATASI TESPİT EDİLDİ</h4>
-            <p className="text-white mb-2">{dbError}</p>
-            {dbError.includes('relation "public.site_settings" does not exist') && (
-                <div className="bg-black p-2 mt-2 border border-gray-700">
-                    <p className="text-gray-400 mb-1">Supabase SQL Editöründe şu tabloyu oluşturmalısınız:</p>
-                    <code className="text-green-400 block whitespace-pre-wrap">
-{`create table site_settings (
-  id bigint generated by default as identity primary key,
-  site_title text,
-  site_description text,
-  meta_keywords text,
-  robots_txt text,
-  footer_text text
-);`}
-                    </code>
-                </div>
-            )}
-         </div>
-       )}
+       {dbError && <div className="bg-red-900/50 border border-red-500 p-4 mb-6 text-xs font-mono text-white">
+          <p className="font-bold">VERİTABANI HATASI:</p>
+          <p>{dbError}</p>
+          <p className="mt-2 text-gray-300">Lütfen 'VERİTABANI / SQL' sekmesinden eksik tabloları veya sütunları onarın.</p>
+       </div>}
 
        <form onSubmit={handleSave} className="space-y-6">
           <div className="space-y-2">
-            <label className="block text-xs font-mono text-green-400">SITE_TITLE (Browser Title & H1)</label>
-            <input 
-              value={config.site_title || ''}
-              onChange={e => setConfig({...config, site_title: e.target.value})}
-              className="w-full bg-black border border-gray-700 p-3 text-white font-mono focus:border-green-500 outline-none"
-              placeholder="Örn: KARAKURAN.COM | YAPIM AŞAMASINDA"
-            />
+            <label className="block text-xs font-mono text-green-400">SITE_TITLE (Browser)</label>
+            <input value={config.site_title || ''} onChange={e => setConfig({...config, site_title: e.target.value})} className="w-full bg-black border border-gray-700 p-3 text-white font-mono outline-none focus:border-green-500" />
           </div>
           <div className="space-y-2">
-            <label className="block text-xs font-mono text-green-400">META_DESCRIPTION (SEO)</label>
-            <textarea 
-              value={config.site_description || ''}
-              onChange={e => setConfig({...config, site_description: e.target.value})}
-              className="w-full bg-black border border-gray-700 p-3 text-white font-mono focus:border-green-500 outline-none h-24"
-              placeholder="Site açıklaması..."
-            />
+            <label className="block text-xs font-mono text-green-400">META_DESCRIPTION</label>
+            <textarea value={config.site_description || ''} onChange={e => setConfig({...config, site_description: e.target.value})} className="w-full bg-black border border-gray-700 p-3 text-white font-mono outline-none focus:border-green-500 h-24" />
           </div>
           <div className="space-y-2">
-            <label className="block text-xs font-mono text-green-400">META_KEYWORDS (Virgül ile ayır)</label>
-            <input 
-              value={config.meta_keywords || ''}
-              onChange={e => setConfig({...config, meta_keywords: e.target.value})}
-              className="w-full bg-black border border-gray-700 p-3 text-white font-mono focus:border-green-500 outline-none"
-              placeholder="mimari, teknoloji, retro..."
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-mono text-green-400">ROBOTS.TXT CONFIG</label>
-            <textarea 
-              value={config.robots_txt || ''}
-              onChange={e => setConfig({...config, robots_txt: e.target.value})}
-              className="w-full bg-black border border-gray-700 p-3 text-gray-400 font-mono focus:border-green-500 outline-none h-32 text-xs"
-              placeholder="User-agent: *&#10;Allow: /"
-            />
+            <label className="block text-xs font-mono text-green-400">FOOTER TEXT</label>
+            <input value={config.footer_text || ''} onChange={e => setConfig({...config, footer_text: e.target.value})} className="w-full bg-black border border-gray-700 p-3 text-white font-mono outline-none focus:border-green-500" />
           </div>
           <div className="pt-4">
-             <button type="submit" disabled={saving} className="bg-green-600 text-black px-6 py-3 font-bold hover:bg-green-500 w-full font-mono uppercase">
-               {saving ? 'KAYDEDİLİYOR...' : '[ AYARLARI KAYDET ]'}
-             </button>
+             <button type="submit" disabled={saving} className="bg-green-600 text-black px-6 py-3 font-bold hover:bg-green-500 w-full font-mono uppercase">{saving ? 'KAYDEDİLİYOR...' : '[ AYARLARI KAYDET ]'}</button>
           </div>
        </form>
     </div>
   );
 }
 
-// 2. Post Editor (Admin)
+// 2. Universal Editor (For Posts and Pages)
 const Editor: React.FC<{ 
-  post?: BlogPost | null; 
-  onSave: (post: Omit<BlogPost, 'id'> & { id?: string }) => void; 
+  initialData?: any; 
+  type: 'post' | 'page';
+  onSave: (data: any) => void; 
   onCancel: () => void; 
   isSaving: boolean;
-}> = ({ post, onSave, onCancel, isSaving }) => {
-  const [title, setTitle] = useState(post?.title || '');
-  const [content, setContent] = useState(post?.content || '');
-  const [excerpt, setExcerpt] = useState(post?.excerpt || '');
-  const [tagsInput, setTagsInput] = useState(post?.tags ? post.tags.join(', ') : '');
+}> = ({ initialData, type, onSave, onCancel, isSaving }) => {
+  const [title, setTitle] = useState(initialData?.title || '');
+  const [content, setContent] = useState(initialData?.content || '');
+  const [excerpt, setExcerpt] = useState(initialData?.excerpt || '');
+  const [slug, setSlug] = useState(initialData?.slug || '');
+  const [tagsInput, setTagsInput] = useState(initialData?.tags ? initialData.tags.join(', ') : '');
   const [activeTab, setActiveTab] = useState<'write' | 'preview'>('write');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const tags = tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
-    onSave({
-      id: post?.id,
+    const tags = tagsInput.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0);
+    
+    const payload: any = {
+      id: initialData?.id,
       title,
       content,
-      excerpt,
-      date: post?.date || new Date().toISOString().split('T')[0],
-      author: 'KARAKURAN',
-      readTime: Math.ceil(content.split(' ').length / 200) + ' DAK',
-      tags: tags
-    });
+    };
+
+    if (type === 'post') {
+        payload.excerpt = excerpt;
+        payload.date = initialData?.date || new Date().toISOString().split('T')[0];
+        payload.author = 'KARAKURAN';
+        payload.readTime = Math.ceil(content.split(' ').length / 200) + ' DAK';
+        payload.tags = tags;
+    } else {
+        payload.slug = slug.toLowerCase().replace(/ /g, '-');
+        payload.created_at = initialData?.created_at || new Date().toISOString();
+    }
+
+    onSave(payload);
   };
 
   const insertTextAtCursor = (textToInsert: string, cursorOffset = 0) => {
@@ -251,67 +362,322 @@ const Editor: React.FC<{
   return (
     <div className="w-full max-w-4xl mx-auto border border-white bg-black">
       <div className="flex border-b border-gray-800 bg-gray-900">
-        <button type="button" onClick={() => setActiveTab('write')} className={`px-6 py-2 text-xs font-mono font-bold ${activeTab === 'write' ? 'bg-black text-green-400' : 'text-gray-500'}`}>[ EDİTÖR ]</button>
+        <button type="button" onClick={() => setActiveTab('write')} className={`px-6 py-2 text-xs font-mono font-bold ${activeTab === 'write' ? 'bg-black text-green-400' : 'text-gray-500'}`}>[ EDİTÖR: {type.toUpperCase()} ]</button>
         <button type="button" onClick={() => setActiveTab('preview')} className={`px-6 py-2 text-xs font-mono font-bold ${activeTab === 'preview' ? 'bg-black text-white' : 'text-gray-500'}`}>[ ÖNİZLEME ]</button>
       </div>
 
       <form onSubmit={handleSubmit} className="p-6 space-y-6">
         <div className="grid grid-cols-1 gap-4">
-            <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-black border border-gray-700 text-white p-3 font-mono text-lg outline-none" placeholder="BAŞLIK..." required />
-            <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-black border border-gray-700 text-gray-300 p-3 font-mono text-sm outline-none" placeholder="ÖZET..." required />
-            <input value={tagsInput} onChange={e => setTagsInput(e.target.value)} className="w-full bg-black border border-gray-700 text-green-400 p-3 font-mono text-sm outline-none" placeholder="etiket1, etiket2..." />
+            <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-black border border-gray-700 text-white p-3 font-mono text-lg outline-none focus:border-green-500" placeholder="BAŞLIK..." required />
+            
+            {type === 'post' && (
+                <>
+                    <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-black border border-gray-700 text-gray-300 p-3 font-mono text-sm outline-none focus:border-green-500" placeholder="ÖZET (Ana sayfada görünür)..." required />
+                    <input value={tagsInput} onChange={e => setTagsInput(e.target.value)} className="w-full bg-black border border-gray-700 text-green-400 p-3 font-mono text-sm outline-none focus:border-green-500" placeholder="ETİKETLER (Virgül ile ayır)..." />
+                </>
+            )}
+
+            {type === 'page' && (
+                <input value={slug} onChange={e => setSlug(e.target.value)} className="w-full bg-black border border-gray-700 text-blue-400 p-3 font-mono text-sm outline-none focus:border-blue-500" placeholder="URL-SLUG (örn: hakkimizda)..." required />
+            )}
         </div>
 
         {activeTab === 'write' ? (
             <div className="group relative">
-              <div className="flex flex-wrap gap-1 mb-2 bg-gray-900 p-2 border border-gray-700">
-                 <button type="button" onClick={() => wrapSelection('**', '**')} className="bg-black text-white border border-gray-600 px-2 text-xs">B</button>
-                 <button type="button" onClick={() => wrapSelection('*', '*')} className="bg-black text-white border border-gray-600 px-2 text-xs">I</button>
-                 <button type="button" onClick={() => insertTextAtCursor('## ', 3)} className="bg-black text-white border border-gray-600 px-2 text-xs">H2</button>
-                 <button type="button" onClick={() => insertTextAtCursor('\n- ', 3)} className="bg-black text-white border border-gray-600 px-2 text-xs">LIST</button>
-                 <button type="button" onClick={() => {const u = prompt('URL:'); if(u) insertTextAtCursor(`![Img](${u})`)}} className="bg-black text-green-400 border border-green-900 px-2 text-xs">IMG</button>
+              <div className="flex flex-wrap gap-2 mb-2 bg-gray-900/50 p-2 border border-gray-800">
+                 <button type="button" onClick={() => wrapSelection('**', '**')} className="border px-2 py-1 text-xs text-gray-300 hover:text-white">BOLD</button>
+                 <button type="button" onClick={() => wrapSelection('*', '*')} className="border px-2 py-1 text-xs text-gray-300 hover:text-white">ITALIC</button>
+                 <button type="button" onClick={() => insertTextAtCursor('# ', 2)} className="border px-2 py-1 text-xs text-gray-300 hover:text-white">H1</button>
+                 <button type="button" onClick={() => insertTextAtCursor('## ', 3)} className="border px-2 py-1 text-xs text-gray-300 hover:text-white">H2</button>
+                 <button type="button" onClick={() => wrapSelection('\n> ', '\n')} className="border px-2 py-1 text-xs text-gray-300 hover:text-white">QUOTE</button>
+                 <button type="button" onClick={() => wrapSelection('\n```\n', '\n```\n')} className="border px-2 py-1 text-xs text-gray-300 hover:text-white">CODE</button>
+                 <button type="button" onClick={() => {const u = prompt('Görsel URL:'); if(u) insertTextAtCursor(`\n![Img](${u})\n`)}} className="border px-2 py-1 text-xs text-green-400 border-green-900 hover:bg-green-900">IMG</button>
               </div>
-              <textarea ref={textareaRef} value={content} onChange={e => setContent(e.target.value)} className="w-full h-[400px] bg-[#050505] border border-gray-700 p-4 font-mono text-sm text-gray-300 outline-none" placeholder="İçerik..." required />
+              <textarea ref={textareaRef} value={content} onChange={e => setContent(e.target.value)} className="w-full h-[400px] bg-[#050505] border border-gray-700 p-4 font-mono text-sm text-gray-300 outline-none focus:border-green-500" placeholder="İçerik..." required />
             </div>
         ) : (
             <div className="w-full h-[450px] bg-[#050505] border border-gray-700 p-8 overflow-y-auto">
-              <MarkdownRenderer content={content} className="prose prose-invert prose-lg max-w-none" />
+               <RetroMarkdownStyles />
+               <MarkdownRenderer content={content} />
             </div>
         )}
 
         <div className="flex justify-end gap-4">
           <button type="button" onClick={onCancel} className="text-gray-500 hover:text-white px-4 py-2 font-mono text-xs">[ İPTAL ]</button>
-          <button type="submit" disabled={isSaving} className="bg-white text-black px-6 py-2 font-bold hover:bg-gray-300 font-mono text-xs">{isSaving ? '...' : '[ KAYDET ]'}</button>
+          <button type="submit" disabled={isSaving} className="bg-white text-black px-6 py-2 font-bold hover:bg-gray-300 font-mono text-xs uppercase">{isSaving ? 'KAYDEDİLİYOR...' : '[ YAYINLA ]'}</button>
         </div>
       </form>
     </div>
   );
 };
 
-// 3. Post Viewer
-const BlogPostView: React.FC<{ post: BlogPost; onBack: () => void }> = ({ post, onBack }) => (
-  <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <button onClick={onBack} className="mb-8 text-xs text-gray-500 hover:text-white transition-colors font-mono">&lt; LİSTEYE DÖN</button>
-    <article className="border-l-2 border-white/20 pl-6 relative">
-      <header className="mb-10">
-        <div className="text-xs text-green-500 mb-3 font-mono uppercase">{post.date} // {post.author} // {post.readTime}</div>
-        <h1 className="text-3xl md:text-5xl font-bold font-['Syncopate'] leading-none mb-6 text-white uppercase">{post.title}</h1>
-        {post.tags && (
-          <div className="flex flex-wrap gap-2 mb-6">
-            {post.tags.map((tag, i) => <span key={i} className="text-[10px] border border-white/20 px-2 py-1 text-gray-400 font-mono">#{tag}</span>)}
-          </div>
-        )}
-        <p className="text-lg text-gray-400 italic border-b border-gray-800 pb-8 font-mono">{post.excerpt}</p>
-      </header>
-      
-      {/* Updated to use MarkdownRenderer to prevent [object Object] error */}
-      <MarkdownRenderer content={post.content} className="prose prose-invert prose-lg max-w-none font-mono text-gray-300" />
-      
-    </article>
-  </div>
+// 3. Category Manager
+const CategoryManager: React.FC = () => {
+    const [categories, setCategories] = useState<Category[]>([]);
+    const [newCat, setNewCat] = useState('');
+
+    useEffect(() => { fetchCats(); }, []);
+    const fetchCats = async () => {
+        const { data } = await supabase.from('categories').select('*');
+        if (data) setCategories(data);
+    };
+    const handleAdd = async () => {
+        if (!newCat) return;
+        await supabase.from('categories').insert([{ name: newCat, slug: newCat.toLowerCase().replace(/ /g, '-') }]);
+        setNewCat('');
+        fetchCats();
+    };
+    const handleDelete = async (id: string) => {
+        await supabase.from('categories').delete().eq('id', id);
+        fetchCats();
+    };
+
+    return (
+        <div className="max-w-2xl mx-auto p-8 bg-black/50 border border-white/20">
+            <h3 className="font-['Syncopate'] text-xl mb-6 border-b border-white/20 pb-4">KATEGORİ YÖNETİMİ</h3>
+            <div className="flex gap-2 mb-6">
+                <input value={newCat} onChange={e => setNewCat(e.target.value)} className="flex-grow bg-black border border-gray-700 p-2 text-white font-mono" placeholder="Yeni Kategori Adı..." />
+                <button onClick={handleAdd} className="bg-green-600 text-black px-4 font-bold font-mono text-xs">EKLE</button>
+            </div>
+            <div className="grid gap-2">
+                {categories.map(cat => (
+                    <div key={cat.id} className="flex justify-between items-center border border-gray-800 p-3 hover:bg-white/5">
+                        <span className="font-mono text-white">{cat.name}</span>
+                        <button onClick={() => handleDelete(cat.id)} className="text-red-500 text-xs">[SİL]</button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// 4. Comment Manager (Admin)
+const CommentManager: React.FC = () => {
+    const [comments, setComments] = useState<Comment[]>([]);
+    useEffect(() => { fetchComments(); }, []);
+    const fetchComments = async () => {
+        const { data } = await supabase.from('comments').select('*').order('created_at', { ascending: false });
+        if (data) setComments(data);
+    };
+    const handleToggle = async (id: string, current: boolean) => {
+        await supabase.from('comments').update({ is_approved: !current }).eq('id', id);
+        fetchComments();
+    };
+    const handleDelete = async (id: string) => {
+        if(!confirm('Silinsin mi?')) return;
+        await supabase.from('comments').delete().eq('id', id);
+        fetchComments();
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto p-8 bg-black/50 border border-white/20">
+            <h3 className="font-['Syncopate'] text-xl mb-6 border-b border-white/20 pb-4">YORUM YÖNETİMİ</h3>
+            <div className="space-y-4">
+                {comments.length === 0 && <div className="text-gray-500 font-mono">Yorum yok.</div>}
+                {comments.map(c => (
+                    <div key={c.id} className={`p-4 border ${c.is_approved ? 'border-green-900 bg-green-900/10' : 'border-yellow-900 bg-yellow-900/10'}`}>
+                        <div className="flex justify-between items-start mb-2">
+                            <div>
+                                <div className="font-bold text-white text-sm">{c.author_name} <span className="text-gray-500 font-normal text-xs">({c.ip_address})</span></div>
+                                <div className="text-[10px] text-gray-500">{new Date(c.created_at).toLocaleString()}</div>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleToggle(c.id, c.is_approved)} className={`text-xs px-2 py-1 border ${c.is_approved ? 'border-yellow-500 text-yellow-500' : 'border-green-500 text-green-500'}`}>
+                                    {c.is_approved ? 'ONAYI KALDIR' : 'ONAYLA'}
+                                </button>
+                                <button onClick={() => handleDelete(c.id)} className="text-xs px-2 py-1 border border-red-500 text-red-500">SİL</button>
+                            </div>
+                        </div>
+                        <p className="text-gray-300 font-mono text-sm">{c.content}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// 5. Database Tools (SQL Helper)
+const DatabaseTools: React.FC = () => {
+  const sqlCreateTables = `
+-- 1. TABLOLARI OLUŞTUR
+create table if not exists public.categories (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  slug text not null,
+  created_at timestamptz default now()
 );
 
-// 4. Admin Login
+create table if not exists public.pages (
+  id uuid default gen_random_uuid() primary key,
+  title text not null,
+  slug text not null unique,
+  content text,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.posts (
+  id uuid default gen_random_uuid() primary key,
+  title text,
+  excerpt text,
+  content text,
+  date text,
+  author text,
+  "readTime" text,
+  tags text[],
+  category_id uuid references public.categories(id),
+  created_at timestamptz default now()
+);
+
+create table if not exists public.comments (
+  id uuid default gen_random_uuid() primary key,
+  post_id uuid references public.posts(id) on delete cascade,
+  page_id uuid references public.pages(id) on delete cascade,
+  author_name text,
+  content text,
+  ip_address text,
+  is_approved boolean default false,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.site_settings (
+  id bigint generated by default as identity primary key,
+  site_title text,
+  site_description text,
+  meta_keywords text,
+  robots_txt text,
+  footer_text text,
+  created_at timestamptz default now()
+);
+  `.trim();
+
+  const sqlFixColumns = `
+-- EKSİK SÜTUNLARI DÜZELT (Hata alırsanız bunu çalıştırın)
+alter table public.site_settings add column if not exists footer_text text;
+alter table public.posts add column if not exists tags text[];
+alter table public.posts add column if not exists category_id uuid references public.categories(id);
+  `.trim();
+
+  const sqlPermissions = `
+-- İZİNLERİ AÇ (RLS)
+alter table public.categories enable row level security;
+alter table public.pages enable row level security;
+alter table public.posts enable row level security;
+alter table public.comments enable row level security;
+alter table public.site_settings enable row level security;
+
+create policy "Enable all" on public.categories for all using (true) with check (true);
+create policy "Enable all" on public.pages for all using (true) with check (true);
+create policy "Enable all" on public.posts for all using (true) with check (true);
+create policy "Enable all" on public.comments for all using (true) with check (true);
+create policy "Enable all" on public.site_settings for all using (true) with check (true);
+  `.trim();
+
+  return (
+    <div className="max-w-4xl mx-auto p-8 bg-black/50 border border-white/20 font-mono">
+       <h3 className="font-['Syncopate'] text-xl mb-6 text-yellow-500 border-b border-yellow-500/30 pb-4">VERİTABANI / SQL ARAÇLARI</h3>
+       
+       <p className="text-sm text-gray-400 mb-6">Aşağıdaki kodları Supabase paneline gidip <b>SQL Editor</b> kısmında çalıştırarak eksik tabloları ve hataları düzeltebilirsiniz.</p>
+
+       <div className="space-y-8">
+          <div>
+            <h4 className="text-green-500 font-bold mb-2 text-sm">A. EKSİK SÜTUNLARI ONAR (HATA ÇÖZÜMÜ)</h4>
+            <textarea readOnly className="w-full h-32 bg-gray-900 border border-green-900 text-green-300 p-4 text-xs font-mono focus:outline-none" value={sqlFixColumns} />
+          </div>
+
+          <div>
+             <h4 className="text-blue-500 font-bold mb-2 text-sm">B. TABLOLARI OLUŞTUR (İLK KURULUM)</h4>
+             <textarea readOnly className="w-full h-48 bg-gray-900 border border-blue-900 text-blue-300 p-4 text-xs font-mono focus:outline-none" value={sqlCreateTables} />
+          </div>
+
+          <div>
+             <h4 className="text-purple-500 font-bold mb-2 text-sm">C. YAZMA İZİNLERİNİ AÇ (RLS)</h4>
+             <textarea readOnly className="w-full h-32 bg-gray-900 border border-purple-900 text-purple-300 p-4 text-xs font-mono focus:outline-none" value={sqlPermissions} />
+          </div>
+       </div>
+    </div>
+  );
+};
+
+// 6. Public Comment Section
+const CommentSection: React.FC<{ entityId: string, entityType: 'post' | 'page' }> = ({ entityId, entityType }) => {
+    const [comments, setComments] = useState<Comment[]>([]);
+    const [name, setName] = useState('');
+    const [content, setContent] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        const fetchC = async () => {
+            let query = supabase.from('comments').select('*').eq('is_approved', true).order('created_at', { ascending: false });
+            if (entityType === 'post') query = query.eq('post_id', entityId);
+            else query = query.eq('page_id', entityId);
+            
+            const { data } = await query;
+            if (data) setComments(data);
+        };
+        fetchC();
+    }, [entityId, entityType]);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            // Simple fetch for IP
+            const res = await fetch('https://api.ipify.org?format=json');
+            const { ip } = await res.json();
+
+            const payload: any = {
+                author_name: name,
+                content: content,
+                ip_address: ip,
+                is_approved: false // Requires admin approval
+            };
+            if (entityType === 'post') payload.post_id = entityId;
+            else payload.page_id = entityId;
+
+            await supabase.from('comments').insert([payload]);
+            alert('Yorumunuz gönderildi! Yönetici onayından sonra yayınlanacaktır.');
+            setName('');
+            setContent('');
+        } catch (err) {
+            console.error(err);
+        }
+        setSubmitting(false);
+    };
+
+    return (
+        <div className="mt-12 pt-8 border-t border-white/10">
+            <h3 className="font-['Syncopate'] text-lg text-white mb-6">YORUMLAR ({comments.length})</h3>
+            
+            {/* List */}
+            <div className="space-y-6 mb-10">
+                {comments.map(c => (
+                    <div key={c.id} className="bg-white/5 p-4 border-l-2 border-green-500">
+                        <div className="flex justify-between mb-2">
+                            <span className="font-bold text-green-400 text-sm">{c.author_name}</span>
+                            <span className="text-[10px] text-gray-500">{new Date(c.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <p className="text-gray-300 text-sm font-mono">{c.content}</p>
+                    </div>
+                ))}
+                {comments.length === 0 && <p className="text-gray-600 text-xs font-mono">Henüz yorum yapılmamış.</p>}
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="bg-black border border-gray-800 p-6">
+                <h4 className="text-white font-mono text-sm mb-4">YORUM YAP</h4>
+                <div className="space-y-4">
+                    <input required value={name} onChange={e => setName(e.target.value)} className="w-full bg-gray-900 border border-gray-700 p-3 text-white font-mono text-sm focus:border-green-500" placeholder="İsim..." />
+                    <textarea required value={content} onChange={e => setContent(e.target.value)} className="w-full bg-gray-900 border border-gray-700 p-3 text-white font-mono text-sm focus:border-green-500 h-24" placeholder="Yorumunuz..." />
+                    <button disabled={submitting} type="submit" className="bg-white text-black px-6 py-2 font-bold font-mono text-xs hover:bg-gray-300">
+                        {submitting ? 'GÖNDERİLİYOR...' : 'GÖNDER'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+// 7. Admin Login
 const AdminLogin: React.FC<{ onLogin: () => void; onCancel: () => void }> = ({ onLogin, onCancel }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -352,73 +718,76 @@ const AdminLogin: React.FC<{ onLogin: () => void; onCancel: () => void }> = ({ o
 
 // --- MAIN SYSTEM COMPONENT ---
 
-const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode }) => {
+const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderComponent }) => {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminTab, setAdminTab] = useState<'posts' | 'pages' | 'categories' | 'comments' | 'settings' | 'database'>('posts');
   
-  // Tabs for Admin Dashboard
-  const [adminTab, setAdminTab] = useState<'settings' | 'posts'>('settings');
-  
-  // Post Management State
+  // Data States
   const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [pages, setPages] = useState<Page[]>([]);
+  
+  // Selection State
   const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
+  const [selectedPage, setSelectedPage] = useState<Page | null>(null);
+  
+  // Edit State
   const [isEditing, setIsEditing] = useState(false);
+  const [editType, setEditType] = useState<'post' | 'page'>('post');
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    // If we are in public mode, we just fetch posts.
-    // If admin mode, we wait for login.
-    if (mode === 'public') {
-        fetchPosts();
-    }
-  }, [mode]);
+     fetchContent();
+  }, []);
 
-  // When switching to 'posts' tab in admin, fetch posts if empty
-  useEffect(() => {
-    if (isAdmin && adminTab === 'posts' && posts.length === 0) {
-        fetchPosts();
-    }
-  }, [isAdmin, adminTab]);
-
-  const fetchPosts = async () => {
+  const fetchContent = async () => {
     setLoading(true);
     if (SUPABASE_URL.includes('YOUR_PROJECT_ID')) { setLoading(false); return; }
-    const { data } = await supabase.from('posts').select('*').order('date', { ascending: false });
-    if (data) setPosts(data);
+    
+    const postsReq = supabase.from('posts').select('*').order('date', { ascending: false });
+    const pagesReq = supabase.from('pages').select('*').order('created_at', { ascending: true });
+    
+    const [pRes, pageRes] = await Promise.all([postsReq, pagesReq]);
+    
+    if (pRes.data) setPosts(pRes.data);
+    if (pageRes.data) setPages(pageRes.data);
+    
     setLoading(false);
   };
 
-  const handleSavePost = async (postData: Omit<BlogPost, 'id'> & { id?: string }) => {
+  const handleSave = async (data: any) => {
     setIsSaving(true);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { id, ...dataToSave } = postData;
     try {
-      if (postData.id) await supabase.from('posts').update(dataToSave).eq('id', postData.id);
-      else await supabase.from('posts').insert([dataToSave]);
-      await fetchPosts();
+      const table = editType === 'post' ? 'posts' : 'pages';
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id, ...payload } = data;
+      
+      if (data.id) await supabase.from(table).update(payload).eq('id', data.id);
+      else await supabase.from(table).insert([payload]);
+      
+      await fetchContent();
       setIsEditing(false);
       setSelectedPost(null);
+      setSelectedPage(null);
     } catch (e: any) { alert(e.message); }
     setIsSaving(false);
   };
 
-  const handleDeletePost = async (id: string) => {
+  const handleDelete = async (id: string, type: 'post' | 'page') => {
     if (!window.confirm('Silinsin mi?')) return;
-    await supabase.from('posts').delete().eq('id', id);
-    fetchPosts();
+    await supabase.from(type === 'post' ? 'posts' : 'pages').delete().eq('id', id);
+    fetchContent();
   };
 
   if (SUPABASE_URL.includes('YOUR_PROJECT_ID')) return <ConfigWarning />;
 
-  // --- MODE: ADMIN ---
+  // --- ADMIN VIEW ---
   if (mode === 'admin') {
-      if (!isAdmin) {
-          return <AdminLogin onLogin={() => setIsAdmin(true)} onCancel={onBack} />;
-      }
+      if (!isAdmin) return <AdminLogin onLogin={() => setIsAdmin(true)} onCancel={onBack} />;
 
       return (
-          <div className="w-full max-w-6xl mx-auto pt-8">
-              <div className="flex justify-between items-center mb-8 border-b border-white/20 pb-4">
+          <div className="w-full max-w-7xl mx-auto pt-8 px-4 h-full flex flex-col">
+              <div className="flex justify-between items-center mb-8 border-b border-white/20 pb-4 shrink-0">
                   <h2 className="text-3xl font-['Syncopate'] text-white">YÖNETİM PANELİ</h2>
                   <div className="flex gap-4">
                      <button onClick={() => setIsAdmin(false)} className="text-red-500 text-xs font-mono hover:underline">ÇIKIŞ YAP</button>
@@ -426,48 +795,66 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode }) => {
                   </div>
               </div>
 
-              <div className="flex flex-col md:flex-row gap-8">
-                  {/* Sidebar / Tabs */}
-                  <div className="w-full md:w-64 flex flex-col gap-2 shrink-0">
-                      <button 
-                        onClick={() => setAdminTab('settings')}
-                        className={`text-left p-4 font-mono text-sm border ${adminTab === 'settings' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}
-                      >
-                        SİSTEM AYARLARI
-                      </button>
-                      <button 
-                        onClick={() => setAdminTab('posts')}
-                        className={`text-left p-4 font-mono text-sm border ${adminTab === 'posts' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}
-                      >
-                        BLOG YÖNETİMİ
-                      </button>
+              <div className="flex flex-col md:flex-row gap-8 flex-grow overflow-hidden">
+                  {/* Sidebar */}
+                  <div className="w-full md:w-64 flex flex-col gap-2 shrink-0 h-full">
+                      <button onClick={() => setAdminTab('posts')} className={`text-left p-4 font-mono text-sm border ${adminTab === 'posts' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>BLOG YÖNETİMİ</button>
+                      <button onClick={() => setAdminTab('pages')} className={`text-left p-4 font-mono text-sm border ${adminTab === 'pages' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>SAYFA YÖNETİMİ</button>
+                      <button onClick={() => setAdminTab('categories')} className={`text-left p-4 font-mono text-sm border ${adminTab === 'categories' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>KATEGORİLER</button>
+                      <button onClick={() => setAdminTab('comments')} className={`text-left p-4 font-mono text-sm border ${adminTab === 'comments' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>YORUMLAR</button>
+                      
+                      <div className="mt-auto space-y-2">
+                          <button onClick={() => setAdminTab('settings')} className={`w-full text-left p-4 font-mono text-sm border ${adminTab === 'settings' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>SİSTEM AYARLARI</button>
+                          <button onClick={() => setAdminTab('database')} className={`w-full text-left p-4 font-mono text-sm border border-yellow-900/50 text-yellow-600 hover:text-yellow-400 hover:border-yellow-400 ${adminTab === 'database' ? 'bg-yellow-900/20 font-bold' : ''}`}>VERİTABANI / SQL</button>
+                      </div>
                   </div>
 
                   {/* Content */}
-                  <div className="flex-grow">
-                      {adminTab === 'settings' ? (
-                          <SettingsEditor />
-                      ) : (
-                          // BLOG MANAGEMENT AREA
+                  <div className="flex-grow overflow-y-auto pb-10">
+                      {adminTab === 'settings' && <SettingsEditor />}
+                      {adminTab === 'categories' && <CategoryManager />}
+                      {adminTab === 'comments' && <CommentManager />}
+                      {adminTab === 'database' && <DatabaseTools />}
+                      
+                      {(adminTab === 'posts' || adminTab === 'pages') && (
                           <div className="space-y-6">
                               {isEditing ? (
-                                  <Editor post={selectedPost} onSave={handleSavePost} onCancel={() => { setIsEditing(false); setSelectedPost(null); }} isSaving={isSaving} />
+                                  <Editor 
+                                    type={editType} 
+                                    initialData={editType === 'post' ? selectedPost : selectedPage} 
+                                    onSave={handleSave} 
+                                    onCancel={() => { setIsEditing(false); setSelectedPost(null); setSelectedPage(null); }} 
+                                    isSaving={isSaving} 
+                                  />
                               ) : (
                                   <>
                                     <div className="flex justify-between items-center bg-gray-900 p-4 border border-gray-800">
-                                        <span className="text-xs text-gray-400 font-mono">TOPLAM YAZI: {posts.length}</span>
-                                        <button onClick={() => { setSelectedPost(null); setIsEditing(true); }} className="bg-green-600 text-black px-4 py-2 text-xs font-bold font-mono hover:bg-green-500">+ YENİ YAZI</button>
+                                        <span className="text-xs text-gray-400 font-mono">
+                                            {adminTab === 'posts' ? `TOPLAM YAZI: ${posts.length}` : `TOPLAM SAYFA: ${pages.length}`}
+                                        </span>
+                                        <button onClick={() => { 
+                                            setEditType(adminTab === 'posts' ? 'post' : 'page'); 
+                                            setSelectedPost(null); 
+                                            setSelectedPage(null); 
+                                            setIsEditing(true); 
+                                        }} className="bg-green-600 text-black px-4 py-2 text-xs font-bold font-mono hover:bg-green-500">+ YENİ EKLE</button>
                                     </div>
-                                    <div className="grid gap-4">
-                                        {posts.map(post => (
-                                            <div key={post.id} className="border border-white/10 p-4 flex justify-between items-center bg-black hover:bg-gray-900">
-                                                <div>
-                                                    <h4 className="text-white font-bold">{post.title}</h4>
-                                                    <div className="text-xs text-gray-500 font-mono mt-1">{post.date} - {post.author}</div>
+                                    <div className="grid gap-2">
+                                        {(adminTab === 'posts' ? posts : pages).map((item: any) => (
+                                            <div key={item.id} className="border border-white/10 p-3 flex justify-between items-center bg-black hover:bg-gray-900">
+                                                <div className="truncate pr-4">
+                                                    <h4 className="text-white font-bold text-sm truncate">{item.title}</h4>
+                                                    <div className="text-[10px] text-gray-500 font-mono">
+                                                        {adminTab === 'posts' ? item.date : `/${item.slug}`}
+                                                    </div>
                                                 </div>
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => { setSelectedPost(post); setIsEditing(true); }} className="text-blue-400 hover:text-white text-xs px-2 py-1 border border-blue-900">DÜZENLE</button>
-                                                    <button onClick={() => handleDeletePost(post.id)} className="text-red-500 hover:text-white text-xs px-2 py-1 border border-red-900">SİL</button>
+                                                <div className="flex gap-2 shrink-0">
+                                                    <button onClick={() => { 
+                                                        setEditType(adminTab === 'posts' ? 'post' : 'page');
+                                                        if(adminTab === 'posts') setSelectedPost(item); else setSelectedPage(item);
+                                                        setIsEditing(true); 
+                                                    }} className="text-blue-400 hover:text-white text-[10px] px-2 py-1 border border-blue-900">EDİT</button>
+                                                    <button onClick={() => handleDelete(item.id, adminTab === 'posts' ? 'post' : 'page')} className="text-red-500 hover:text-white text-[10px] px-2 py-1 border border-red-900">SİL</button>
                                                 </div>
                                             </div>
                                         ))}
@@ -482,32 +869,114 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode }) => {
       );
   }
 
-  // --- MODE: PUBLIC BLOG ---
+  // --- PUBLIC VIEW ---
+  // Determines what to show in the Right Column
+  const activeEntity = selectedPage || selectedPost;
+
   return (
-    <div className="max-w-5xl mx-auto pt-12">
-        {selectedPost ? (
-            <BlogPostView post={selectedPost} onBack={() => setSelectedPost(null)} />
-        ) : (
-            <>
-               <div className="flex justify-between items-end border-b border-white/20 pb-4 mb-12">
-                  <h2 className="text-4xl font-['Syncopate'] font-bold text-white">BLOG</h2>
-                  <button onClick={onBack} className="text-xs text-gray-500 font-mono hover:text-white">ANA SAYFA</button>
-               </div>
-               
-               {loading ? <RetroLoader /> : (
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      {posts.map(post => (
-                        <div key={post.id} onClick={() => setSelectedPost(post)} className="group border border-white/20 bg-black/40 p-6 cursor-pointer hover:bg-white/5 transition-all">
-                           <div className="text-xs text-green-500 font-mono mb-2">{post.date}</div>
-                           <h3 className="text-2xl font-['Syncopate'] font-bold mb-4 group-hover:text-green-400 transition-colors">{post.title}</h3>
-                           <p className="text-gray-400 font-mono text-sm line-clamp-3">{post.excerpt}</p>
-                           <div className="mt-4 text-right text-xs text-gray-600 group-hover:text-white font-mono">OKU &gt;</div>
+    <div className="flex w-full h-full pt-4 md:pt-8 px-4 md:px-8 gap-8 overflow-hidden">
+        {/* Left Column: Sidebar */}
+        <div className={`w-full md:w-1/3 flex flex-col h-full border-r border-white/10 bg-black/40 backdrop-blur-sm ${activeEntity ? 'hidden md:flex' : 'flex'}`}>
+            <div className="mb-6 pb-4 border-b border-white/20 shrink-0">
+                <h2 className="text-2xl font-['Syncopate'] text-white">DATA_LOGS</h2>
+            </div>
+            
+            {loading ? <RetroLoader /> : (
+                <div className="overflow-y-auto pr-2 custom-scrollbar space-y-8 flex-grow">
+                    
+                    {/* Section: Pages */}
+                    {pages.length > 0 && (
+                        <div>
+                            <h3 className="text-xs font-bold text-gray-500 mb-3 pl-2 uppercase tracking-widest">SAYFALAR</h3>
+                            <div className="space-y-1">
+                                {pages.map(page => (
+                                    <div 
+                                        key={page.id}
+                                        onClick={() => { setSelectedPage(page); setSelectedPost(null); }}
+                                        className={`cursor-pointer px-4 py-2 border-l-2 transition-all text-sm font-mono ${selectedPage?.id === page.id ? 'border-green-500 text-white bg-white/5' : 'border-transparent text-gray-400 hover:text-green-400'}`}
+                                    >
+                                        {page.title}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                      ))}
-                   </div>
-               )}
-            </>
-        )}
+                    )}
+
+                    {/* Section: Posts */}
+                    <div>
+                        <h3 className="text-xs font-bold text-gray-500 mb-3 pl-2 uppercase tracking-widest">BLOG YAZILARI</h3>
+                        <div className="space-y-4">
+                            {posts.map(post => (
+                                <div 
+                                   key={post.id} 
+                                   onClick={() => { setSelectedPost(post); setSelectedPage(null); }}
+                                   className={`group border cursor-pointer p-4 transition-all ${selectedPost?.id === post.id ? 'bg-white text-black border-white' : 'bg-transparent border-white/20 text-gray-300 hover:border-green-500'}`}
+                                >
+                                    <div className={`text-[10px] font-mono mb-1 ${selectedPost?.id === post.id ? 'text-black' : 'text-green-500'}`}>{post.date}</div>
+                                    <h3 className="font-bold font-['Syncopate'] text-lg leading-tight mb-2">{post.title}</h3>
+                                </div>
+                            ))}
+                            {posts.length === 0 && <div className="text-center text-gray-500 py-4 font-mono">KAYIT BULUNAMADI.</div>}
+                        </div>
+                    </div>
+
+                </div>
+            )}
+        </div>
+
+        {/* Right Column: Content Viewer */}
+        <div className={`w-full md:w-2/3 h-full relative overflow-hidden ${activeEntity ? 'block' : 'hidden md:block'}`}>
+            {activeEntity ? (
+                <div className="w-full h-full animate-in fade-in zoom-in duration-300 overflow-y-auto custom-scrollbar pr-4 pb-20">
+                    <button onClick={() => { setSelectedPost(null); setSelectedPage(null); }} className="md:hidden mb-4 text-xs text-green-500 font-mono border border-green-900 px-2 py-1">&lt; MENÜ</button>
+                    
+                    {/* Render Post or Page */}
+                    <article className="border-b border-white/10 pb-8 mb-8">
+                        <header className="mb-8">
+                            {selectedPost && (
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="text-xs text-green-500 font-mono uppercase">{selectedPost.date} // {selectedPost.author}</div>
+                                    <div className="text-xs text-gray-500">{selectedPost.readTime}</div>
+                                </div>
+                            )}
+                            <h1 className="text-3xl md:text-5xl font-black font-['Syncopate'] leading-tight mb-4 text-white uppercase">
+                                {activeEntity.title}
+                            </h1>
+                            {selectedPost?.tags && (
+                                <div className="flex flex-wrap gap-2">
+                                    {selectedPost.tags.map((tag, i) => <span key={i} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 text-gray-300 font-mono">#{tag}</span>)}
+                                </div>
+                            )}
+                        </header>
+                        
+                        {/* Content */}
+                        <div className="pb-8">
+                            {selectedPost && <p className="font-mono text-lg text-white font-bold italic mb-8 border-l-4 border-green-500 pl-4 bg-white/5 p-4">{selectedPost.excerpt}</p>}
+                            <MarkdownRenderer content={activeEntity.content} />
+                        </div>
+                    </article>
+
+                    {/* Comment System */}
+                    <CommentSection entityId={activeEntity.id} entityType={selectedPost ? 'post' : 'page'} />
+                </div>
+            ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center text-center opacity-80 pointer-events-none">
+                     <div className="scale-75 md:scale-100 pointer-events-auto">
+                        {placeholderComponent}
+                     </div>
+                     <div className="mt-8 font-mono text-green-500 animate-pulse bg-black/50 p-2 border border-green-900">
+                         &lt; LÜTFEN BİR VERİ AKIŞI SEÇİNİZ &gt;
+                     </div>
+                </div>
+            )}
+        </div>
+        
+        <style>{`
+          .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+          .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+          .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #555; }
+        `}</style>
     </div>
   );
 };
