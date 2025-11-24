@@ -18,6 +18,31 @@ interface BlogSystemProps {
 
 marked.use({ breaks: true, gfm: true });
 
+// --- TOAST NOTIFICATION SYSTEM ---
+interface Toast {
+  id: number;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
+
+const ToastContainer: React.FC<{ toasts: Toast[] }> = ({ toasts }) => {
+  return (
+    <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
+      {toasts.map(t => (
+        <div key={t.id} className={`pointer-events-auto min-w-[300px] border-l-4 p-4 font-mono text-xs shadow-[0_0_10px_rgba(0,0,0,0.5)] animate-in slide-in-from-right duration-300 bg-black ${
+          t.type === 'success' ? 'border-green-500 text-green-400' : 
+          t.type === 'error' ? 'border-red-500 text-red-400' : 'border-blue-500 text-blue-400'
+        }`}>
+          <div className="font-bold mb-1 uppercase">
+            {t.type === 'success' ? '>> İŞLEM BAŞARILI' : t.type === 'error' ? '>> SİSTEM HATASI' : '>> BİLGİ'}
+          </div>
+          <div>{t.message}</div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // --- CUSTOM RETRO STYLES FOR MARKDOWN CONTENT ---
 const RetroMarkdownStyles = () => (
   <style>{`
@@ -209,7 +234,7 @@ const ConfigWarning: React.FC = () => (
 // --- ADMIN SUB-COMPONENTS ---
 
 // 1. Settings Editor
-const SettingsEditor: React.FC = () => {
+const SettingsEditor: React.FC<{ notify: (msg: string, type: 'success'|'error') => void }> = ({ notify }) => {
   const [config, setConfig] = useState<SiteConfig>({
     site_title: '',
     site_description: '',
@@ -257,9 +282,9 @@ const SettingsEditor: React.FC = () => {
 
     if (error) {
         setDbError(error.message);
-        alert('Kayıt Başarısız: ' + error.message);
+        notify('Kayıt Başarısız: ' + error.message, 'error');
     } else {
-        alert('Ayarlar Güncellendi! Sayfayı yenileyince aktif olur.');
+        notify('Sistem Ayarları Güncellendi.', 'success');
     }
     
     setSaving(false);
@@ -301,26 +326,38 @@ const SettingsEditor: React.FC = () => {
 const Editor: React.FC<{ 
   initialData?: any; 
   type: 'post' | 'page';
+  categories: Category[];
   onSave: (data: any) => void; 
   onCancel: () => void; 
   isSaving: boolean;
-}> = ({ initialData, type, onSave, onCancel, isSaving }) => {
+}> = ({ initialData, type, categories, onSave, onCancel, isSaving }) => {
   const [title, setTitle] = useState(initialData?.title || '');
   const [content, setContent] = useState(initialData?.content || '');
   const [excerpt, setExcerpt] = useState(initialData?.excerpt || '');
   const [slug, setSlug] = useState(initialData?.slug || '');
   const [tagsInput, setTagsInput] = useState(initialData?.tags ? initialData.tags.join(', ') : '');
+  const [categoryId, setCategoryId] = useState(initialData?.category_id || '');
+  const [isVisible, setIsVisible] = useState(initialData?.is_visible !== false); // Default true
   const [activeTab, setActiveTab] = useState<'write' | 'preview'>('write');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-generate slug from title if empty
+  useEffect(() => {
+    if (!initialData && !slug && title) {
+      setSlug(title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''));
+    }
+  }, [title]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const tags = tagsInput.split(',').map((tag: string) => tag.trim()).filter((tag: string) => tag.length > 0);
+    const finalSlug = slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
     
     const payload: any = {
       id: initialData?.id,
       title,
       content,
+      slug: finalSlug,
     };
 
     if (type === 'post') {
@@ -329,9 +366,10 @@ const Editor: React.FC<{
         payload.author = 'KARAKURAN';
         payload.readTime = Math.ceil(content.split(' ').length / 200) + ' DAK';
         payload.tags = tags;
+        if (categoryId) payload.category_id = categoryId;
     } else {
-        payload.slug = slug.toLowerCase().replace(/ /g, '-');
         payload.created_at = initialData?.created_at || new Date().toISOString();
+        payload.is_visible = isVisible;
     }
 
     onSave(payload);
@@ -367,18 +405,28 @@ const Editor: React.FC<{
       </div>
 
       <form onSubmit={handleSubmit} className="p-6 space-y-6">
-        <div className="grid grid-cols-1 gap-4">
-            <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-black border border-gray-700 text-white p-3 font-mono text-lg outline-none focus:border-green-500" placeholder="BAŞLIK..." required />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-black border border-gray-700 text-white p-3 font-mono text-lg outline-none focus:border-green-500 md:col-span-2" placeholder="BAŞLIK..." required />
             
+            <input value={slug} onChange={e => setSlug(e.target.value)} className="w-full bg-black border border-gray-700 text-blue-400 p-3 font-mono text-sm outline-none focus:border-blue-500" placeholder="URL-SLUG (örn: hakkimizda)..." required />
+            
+            <select value={categoryId} onChange={e => setCategoryId(e.target.value)} className="w-full bg-black border border-gray-700 text-white p-3 font-mono text-sm outline-none focus:border-green-500">
+              <option value="">-- KATEGORİ SEÇ --</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+
             {type === 'post' && (
                 <>
-                    <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-black border border-gray-700 text-gray-300 p-3 font-mono text-sm outline-none focus:border-green-500" placeholder="ÖZET (Ana sayfada görünür)..." required />
-                    <input value={tagsInput} onChange={e => setTagsInput(e.target.value)} className="w-full bg-black border border-gray-700 text-green-400 p-3 font-mono text-sm outline-none focus:border-green-500" placeholder="ETİKETLER (Virgül ile ayır)..." />
+                    <input value={excerpt} onChange={e => setExcerpt(e.target.value)} className="w-full bg-black border border-gray-700 text-gray-300 p-3 font-mono text-sm outline-none focus:border-green-500 md:col-span-2" placeholder="ÖZET (Ana sayfada görünür)..." required />
+                    <input value={tagsInput} onChange={e => setTagsInput(e.target.value)} className="w-full bg-black border border-gray-700 text-green-400 p-3 font-mono text-sm outline-none focus:border-green-500 md:col-span-2" placeholder="ETİKETLER (Virgül ile ayır)..." />
                 </>
             )}
 
             {type === 'page' && (
-                <input value={slug} onChange={e => setSlug(e.target.value)} className="w-full bg-black border border-gray-700 text-blue-400 p-3 font-mono text-sm outline-none focus:border-blue-500" placeholder="URL-SLUG (örn: hakkimizda)..." required />
+                <div className="flex items-center gap-2 border border-gray-700 p-3">
+                   <input type="checkbox" checked={isVisible} onChange={e => setIsVisible(e.target.checked)} id="vis" className="accent-green-500" />
+                   <label htmlFor="vis" className="text-white font-mono text-sm cursor-pointer">MENÜDE GÖSTER</label>
+                </div>
             )}
         </div>
 
@@ -412,7 +460,7 @@ const Editor: React.FC<{
 };
 
 // 3. Category Manager
-const CategoryManager: React.FC = () => {
+const CategoryManager: React.FC<{ notify: (m:string, t:'success'|'error')=>void }> = ({ notify }) => {
     const [categories, setCategories] = useState<Category[]>([]);
     const [newCat, setNewCat] = useState('');
 
@@ -423,13 +471,21 @@ const CategoryManager: React.FC = () => {
     };
     const handleAdd = async () => {
         if (!newCat) return;
-        await supabase.from('categories').insert([{ name: newCat, slug: newCat.toLowerCase().replace(/ /g, '-') }]);
-        setNewCat('');
-        fetchCats();
+        const { error } = await supabase.from('categories').insert([{ name: newCat, slug: newCat.toLowerCase().replace(/ /g, '-') }]);
+        if(error) notify(error.message, 'error');
+        else {
+          notify('Kategori Eklendi', 'success');
+          setNewCat('');
+          fetchCats();
+        }
     };
     const handleDelete = async (id: string) => {
-        await supabase.from('categories').delete().eq('id', id);
-        fetchCats();
+        const { error } = await supabase.from('categories').delete().eq('id', id);
+        if(error) notify(error.message, 'error');
+        else {
+          notify('Kategori Silindi', 'info');
+          fetchCats();
+        }
     };
 
     return (
@@ -512,12 +568,14 @@ create table if not exists public.pages (
   title text not null,
   slug text not null unique,
   content text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  is_visible boolean default true
 );
 
 create table if not exists public.posts (
   id uuid default gen_random_uuid() primary key,
   title text,
+  slug text,
   excerpt text,
   content text,
   date text,
@@ -527,6 +585,8 @@ create table if not exists public.posts (
   category_id uuid references public.categories(id),
   created_at timestamptz default now()
 );
+
+create unique index if not exists posts_slug_idx on public.posts (slug);
 
 create table if not exists public.comments (
   id uuid default gen_random_uuid() primary key,
@@ -553,8 +613,12 @@ create table if not exists public.site_settings (
   const sqlFixColumns = `
 -- EKSİK SÜTUNLARI DÜZELT (Hata alırsanız bunu çalıştırın)
 alter table public.site_settings add column if not exists footer_text text;
+
 alter table public.posts add column if not exists tags text[];
 alter table public.posts add column if not exists category_id uuid references public.categories(id);
+alter table public.posts add column if not exists slug text;
+
+alter table public.pages add column if not exists is_visible boolean default true;
   `.trim();
 
   const sqlPermissions = `
@@ -565,10 +629,19 @@ alter table public.posts enable row level security;
 alter table public.comments enable row level security;
 alter table public.site_settings enable row level security;
 
+drop policy if exists "Enable all" on public.categories;
 create policy "Enable all" on public.categories for all using (true) with check (true);
+
+drop policy if exists "Enable all" on public.pages;
 create policy "Enable all" on public.pages for all using (true) with check (true);
+
+drop policy if exists "Enable all" on public.posts;
 create policy "Enable all" on public.posts for all using (true) with check (true);
+
+drop policy if exists "Enable all" on public.comments;
 create policy "Enable all" on public.comments for all using (true) with check (true);
+
+drop policy if exists "Enable all" on public.site_settings;
 create policy "Enable all" on public.site_settings for all using (true) with check (true);
   `.trim();
 
@@ -580,7 +653,7 @@ create policy "Enable all" on public.site_settings for all using (true) with che
 
        <div className="space-y-8">
           <div>
-            <h4 className="text-green-500 font-bold mb-2 text-sm">A. EKSİK SÜTUNLARI ONAR (HATA ÇÖZÜMÜ)</h4>
+            <h4 className="text-green-500 font-bold mb-2 text-sm">A. EKSİK SÜTUNLARI ONAR (GÜNCELLEME)</h4>
             <textarea readOnly className="w-full h-32 bg-gray-900 border border-green-900 text-green-300 p-4 text-xs font-mono focus:outline-none" value={sqlFixColumns} />
           </div>
 
@@ -599,7 +672,7 @@ create policy "Enable all" on public.site_settings for all using (true) with che
 };
 
 // 6. Public Comment Section
-const CommentSection: React.FC<{ entityId: string, entityType: 'post' | 'page' }> = ({ entityId, entityType }) => {
+const CommentSection: React.FC<{ entityId: string, entityType: 'post' | 'page', notify: (m:string, t:'success'|'error')=>void }> = ({ entityId, entityType, notify }) => {
     const [comments, setComments] = useState<Comment[]>([]);
     const [name, setName] = useState('');
     const [content, setContent] = useState('');
@@ -621,7 +694,6 @@ const CommentSection: React.FC<{ entityId: string, entityType: 'post' | 'page' }
         e.preventDefault();
         setSubmitting(true);
         try {
-            // Simple fetch for IP
             const res = await fetch('https://api.ipify.org?format=json');
             const { ip } = await res.json();
 
@@ -629,17 +701,18 @@ const CommentSection: React.FC<{ entityId: string, entityType: 'post' | 'page' }
                 author_name: name,
                 content: content,
                 ip_address: ip,
-                is_approved: false // Requires admin approval
+                is_approved: false
             };
             if (entityType === 'post') payload.post_id = entityId;
             else payload.page_id = entityId;
 
             await supabase.from('comments').insert([payload]);
-            alert('Yorumunuz gönderildi! Yönetici onayından sonra yayınlanacaktır.');
+            notify('Yorumunuz gönderildi! Yönetici onayından sonra yayınlanacaktır.', 'info');
             setName('');
             setContent('');
         } catch (err) {
             console.error(err);
+            notify('Hata oluştu.', 'error');
         }
         setSubmitting(false);
     };
@@ -648,7 +721,6 @@ const CommentSection: React.FC<{ entityId: string, entityType: 'post' | 'page' }
         <div className="mt-12 pt-8 border-t border-white/10">
             <h3 className="font-['Syncopate'] text-lg text-white mb-6">YORUMLAR ({comments.length})</h3>
             
-            {/* List */}
             <div className="space-y-6 mb-10">
                 {comments.map(c => (
                     <div key={c.id} className="bg-white/5 p-4 border-l-2 border-green-500">
@@ -662,7 +734,6 @@ const CommentSection: React.FC<{ entityId: string, entityType: 'post' | 'page' }
                 {comments.length === 0 && <p className="text-gray-600 text-xs font-mono">Henüz yorum yapılmamış.</p>}
             </div>
 
-            {/* Form */}
             <form onSubmit={handleSubmit} className="bg-black border border-gray-800 p-6">
                 <h4 className="text-white font-mono text-sm mb-4">YORUM YAP</h4>
                 <div className="space-y-4">
@@ -725,6 +796,7 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
   // Data States
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   
   // Selection State
   const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
@@ -736,6 +808,17 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Toast State
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const notify = (message: string, type: 'success' | 'error' | 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+  };
+
   useEffect(() => {
      fetchContent();
   }, []);
@@ -746,13 +829,37 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
     
     const postsReq = supabase.from('posts').select('*').order('date', { ascending: false });
     const pagesReq = supabase.from('pages').select('*').order('created_at', { ascending: true });
+    const catsReq = supabase.from('categories').select('*');
     
-    const [pRes, pageRes] = await Promise.all([postsReq, pagesReq]);
+    const [pRes, pageRes, catRes] = await Promise.all([postsReq, pagesReq, catsReq]);
     
     if (pRes.data) setPosts(pRes.data);
     if (pageRes.data) setPages(pageRes.data);
+    if (catRes.data) setCategories(catRes.data);
+
+    // Initial Routing Logic
+    const path = window.location.pathname.replace(/^\/|\/$/g, '');
+    if (path) {
+        // Try to find matching page or post
+        const matchedPage = pageRes.data?.find(p => p.slug === path);
+        const matchedPost = pRes.data?.find(p => p.slug === path);
+        if (matchedPage) setSelectedPage(matchedPage);
+        else if (matchedPost) setSelectedPost(matchedPost);
+    }
     
     setLoading(false);
+  };
+
+  const handleSelection = (item: BlogPost | Page, type: 'post' | 'page') => {
+    if (type === 'post') {
+        setSelectedPost(item as BlogPost);
+        setSelectedPage(null);
+        if ((item as BlogPost).slug) window.history.pushState({}, '', `/${(item as BlogPost).slug}`);
+    } else {
+        setSelectedPage(item as Page);
+        setSelectedPost(null);
+        window.history.pushState({}, '', `/${(item as Page).slug}`);
+    }
   };
 
   const handleSave = async (data: any) => {
@@ -762,21 +869,31 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { id, ...payload } = data;
       
-      if (data.id) await supabase.from(table).update(payload).eq('id', data.id);
-      else await supabase.from(table).insert([payload]);
+      let res;
+      if (data.id) res = await supabase.from(table).update(payload).eq('id', data.id);
+      else res = await supabase.from(table).insert([payload]);
       
+      if (res.error) throw res.error;
+
       await fetchContent();
       setIsEditing(false);
       setSelectedPost(null);
       setSelectedPage(null);
-    } catch (e: any) { alert(e.message); }
+      notify('Kayıt Başarıyla Tamamlandı.', 'success');
+    } catch (e: any) { 
+        notify(e.message, 'error');
+    }
     setIsSaving(false);
   };
 
   const handleDelete = async (id: string, type: 'post' | 'page') => {
     if (!window.confirm('Silinsin mi?')) return;
-    await supabase.from(type === 'post' ? 'posts' : 'pages').delete().eq('id', id);
-    fetchContent();
+    const { error } = await supabase.from(type === 'post' ? 'posts' : 'pages').delete().eq('id', id);
+    if (error) notify(error.message, 'error');
+    else {
+        notify('Silme İşlemi Başarılı.', 'info');
+        fetchContent();
+    }
   };
 
   if (SUPABASE_URL.includes('YOUR_PROJECT_ID')) return <ConfigWarning />;
@@ -786,7 +903,8 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
       if (!isAdmin) return <AdminLogin onLogin={() => setIsAdmin(true)} onCancel={onBack} />;
 
       return (
-          <div className="w-full max-w-7xl mx-auto pt-8 px-4 h-full flex flex-col">
+          <div className="w-full max-w-7xl mx-auto pt-8 px-4 h-full flex flex-col relative">
+              <ToastContainer toasts={toasts} />
               <div className="flex justify-between items-center mb-8 border-b border-white/20 pb-4 shrink-0">
                   <h2 className="text-3xl font-['Syncopate'] text-white">YÖNETİM PANELİ</h2>
                   <div className="flex gap-4">
@@ -798,21 +916,22 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
               <div className="flex flex-col md:flex-row gap-8 flex-grow overflow-hidden">
                   {/* Sidebar */}
                   <div className="w-full md:w-64 flex flex-col gap-2 shrink-0 h-full">
-                      <button onClick={() => setAdminTab('posts')} className={`text-left p-4 font-mono text-sm border ${adminTab === 'posts' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>BLOG YÖNETİMİ</button>
-                      <button onClick={() => setAdminTab('pages')} className={`text-left p-4 font-mono text-sm border ${adminTab === 'pages' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>SAYFA YÖNETİMİ</button>
-                      <button onClick={() => setAdminTab('categories')} className={`text-left p-4 font-mono text-sm border ${adminTab === 'categories' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>KATEGORİLER</button>
-                      <button onClick={() => setAdminTab('comments')} className={`text-left p-4 font-mono text-sm border ${adminTab === 'comments' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>YORUMLAR</button>
+                      {['posts', 'pages', 'categories', 'comments'].map(tab => (
+                          <button key={tab} onClick={() => { setAdminTab(tab as any); setIsEditing(false); }} className={`text-left p-4 font-mono text-sm border uppercase ${adminTab === tab ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>
+                              {tab === 'posts' ? 'Blog Yönetimi' : tab === 'pages' ? 'Sayfa Yönetimi' : tab === 'categories' ? 'Kategoriler' : 'Yorumlar'}
+                          </button>
+                      ))}
                       
                       <div className="mt-auto space-y-2">
-                          <button onClick={() => setAdminTab('settings')} className={`w-full text-left p-4 font-mono text-sm border ${adminTab === 'settings' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>SİSTEM AYARLARI</button>
-                          <button onClick={() => setAdminTab('database')} className={`w-full text-left p-4 font-mono text-sm border border-yellow-900/50 text-yellow-600 hover:text-yellow-400 hover:border-yellow-400 ${adminTab === 'database' ? 'bg-yellow-900/20 font-bold' : ''}`}>VERİTABANI / SQL</button>
+                          <button onClick={() => { setAdminTab('settings'); setIsEditing(false); }} className={`w-full text-left p-4 font-mono text-sm border ${adminTab === 'settings' ? 'bg-white text-black border-white font-bold' : 'border-gray-800 text-gray-500 hover:border-white hover:text-white'}`}>SİSTEM AYARLARI</button>
+                          <button onClick={() => { setAdminTab('database'); setIsEditing(false); }} className={`w-full text-left p-4 font-mono text-sm border border-yellow-900/50 text-yellow-600 hover:text-yellow-400 hover:border-yellow-400 ${adminTab === 'database' ? 'bg-yellow-900/20 font-bold' : ''}`}>VERİTABANI / SQL</button>
                       </div>
                   </div>
 
                   {/* Content */}
                   <div className="flex-grow overflow-y-auto pb-10">
-                      {adminTab === 'settings' && <SettingsEditor />}
-                      {adminTab === 'categories' && <CategoryManager />}
+                      {adminTab === 'settings' && <SettingsEditor notify={notify} />}
+                      {adminTab === 'categories' && <CategoryManager notify={notify} />}
                       {adminTab === 'comments' && <CommentManager />}
                       {adminTab === 'database' && <DatabaseTools />}
                       
@@ -822,6 +941,7 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
                                   <Editor 
                                     type={editType} 
                                     initialData={editType === 'post' ? selectedPost : selectedPage} 
+                                    categories={categories}
                                     onSave={handleSave} 
                                     onCancel={() => { setIsEditing(false); setSelectedPost(null); setSelectedPage(null); }} 
                                     isSaving={isSaving} 
@@ -842,13 +962,15 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
                                     <div className="grid gap-2">
                                         {(adminTab === 'posts' ? posts : pages).map((item: any) => (
                                             <div key={item.id} className="border border-white/10 p-3 flex justify-between items-center bg-black hover:bg-gray-900">
-                                                <div className="truncate pr-4">
+                                                <div className="truncate pr-4 flex-grow">
                                                     <h4 className="text-white font-bold text-sm truncate">{item.title}</h4>
-                                                    <div className="text-[10px] text-gray-500 font-mono">
-                                                        {adminTab === 'posts' ? item.date : `/${item.slug}`}
+                                                    <div className="text-[10px] text-gray-500 font-mono flex gap-2">
+                                                        <span>{adminTab === 'posts' ? item.date : `/${item.slug}`}</span>
+                                                        {item.category_id && <span className="text-blue-500">[{categories.find(c => c.id === item.category_id)?.name}]</span>}
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-2 shrink-0">
+                                                    <a href={`/${item.slug || ''}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white text-[10px] px-2 py-1 border border-gray-700">GÖRÜNTÜLE (↗)</a>
                                                     <button onClick={() => { 
                                                         setEditType(adminTab === 'posts' ? 'post' : 'page');
                                                         if(adminTab === 'posts') setSelectedPost(item); else setSelectedPage(item);
@@ -874,7 +996,8 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
   const activeEntity = selectedPage || selectedPost;
 
   return (
-    <div className="flex w-full h-full pt-4 md:pt-8 px-4 md:px-8 gap-8 overflow-hidden">
+    <div className="flex w-full h-full pt-4 md:pt-8 px-4 md:px-8 gap-8 overflow-hidden relative">
+        <ToastContainer toasts={toasts} />
         {/* Left Column: Sidebar */}
         <div className={`w-full md:w-1/3 flex flex-col h-full border-r border-white/10 bg-black/40 backdrop-blur-sm ${activeEntity ? 'hidden md:flex' : 'flex'}`}>
             <div className="mb-6 pb-4 border-b border-white/20 shrink-0">
@@ -885,14 +1008,14 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
                 <div className="overflow-y-auto pr-2 custom-scrollbar space-y-8 flex-grow">
                     
                     {/* Section: Pages */}
-                    {pages.length > 0 && (
+                    {pages.filter(p => p.is_visible !== false).length > 0 && (
                         <div>
                             <h3 className="text-xs font-bold text-gray-500 mb-3 pl-2 uppercase tracking-widest">SAYFALAR</h3>
                             <div className="space-y-1">
-                                {pages.map(page => (
+                                {pages.filter(p => p.is_visible !== false).map(page => (
                                     <div 
                                         key={page.id}
-                                        onClick={() => { setSelectedPage(page); setSelectedPost(null); }}
+                                        onClick={() => handleSelection(page, 'page')}
                                         className={`cursor-pointer px-4 py-2 border-l-2 transition-all text-sm font-mono ${selectedPage?.id === page.id ? 'border-green-500 text-white bg-white/5' : 'border-transparent text-gray-400 hover:text-green-400'}`}
                                     >
                                         {page.title}
@@ -909,10 +1032,13 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
                             {posts.map(post => (
                                 <div 
                                    key={post.id} 
-                                   onClick={() => { setSelectedPost(post); setSelectedPage(null); }}
+                                   onClick={() => handleSelection(post, 'post')}
                                    className={`group border cursor-pointer p-4 transition-all ${selectedPost?.id === post.id ? 'bg-white text-black border-white' : 'bg-transparent border-white/20 text-gray-300 hover:border-green-500'}`}
                                 >
-                                    <div className={`text-[10px] font-mono mb-1 ${selectedPost?.id === post.id ? 'text-black' : 'text-green-500'}`}>{post.date}</div>
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className={`text-[10px] font-mono ${selectedPost?.id === post.id ? 'text-black' : 'text-green-500'}`}>{post.date}</span>
+                                        {post.category_id && <span className="text-[9px] border border-gray-600 px-1 text-gray-400">{categories.find(c => c.id === post.category_id)?.name}</span>}
+                                    </div>
                                     <h3 className="font-bold font-['Syncopate'] text-lg leading-tight mb-2">{post.title}</h3>
                                 </div>
                             ))}
@@ -928,7 +1054,7 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
         <div className={`w-full md:w-2/3 h-full relative overflow-hidden ${activeEntity ? 'block' : 'hidden md:block'}`}>
             {activeEntity ? (
                 <div className="w-full h-full animate-in fade-in zoom-in duration-300 overflow-y-auto custom-scrollbar pr-4 pb-20">
-                    <button onClick={() => { setSelectedPost(null); setSelectedPage(null); }} className="md:hidden mb-4 text-xs text-green-500 font-mono border border-green-900 px-2 py-1">&lt; MENÜ</button>
+                    <button onClick={() => { setSelectedPost(null); setSelectedPage(null); window.history.pushState({}, '', '/'); }} className="md:hidden mb-4 text-xs text-green-500 font-mono border border-green-900 px-2 py-1">&lt; MENÜ</button>
                     
                     {/* Render Post or Page */}
                     <article className="border-b border-white/10 pb-8 mb-8">
@@ -942,6 +1068,13 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
                             <h1 className="text-3xl md:text-5xl font-black font-['Syncopate'] leading-tight mb-4 text-white uppercase">
                                 {activeEntity.title}
                             </h1>
+                            {selectedPost?.category_id && (
+                                <div className="mb-4">
+                                    <span className="text-xs bg-green-900/30 text-green-400 px-2 py-1 border border-green-900 font-mono">
+                                        {categories.find(c => c.id === selectedPost.category_id)?.name}
+                                    </span>
+                                </div>
+                            )}
                             {selectedPost?.tags && (
                                 <div className="flex flex-wrap gap-2">
                                     {selectedPost.tags.map((tag, i) => <span key={i} className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 text-gray-300 font-mono">#{tag}</span>)}
@@ -957,7 +1090,7 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack, mode, placeholderCompon
                     </article>
 
                     {/* Comment System */}
-                    <CommentSection entityId={activeEntity.id} entityType={selectedPost ? 'post' : 'page'} />
+                    <CommentSection notify={notify} entityId={activeEntity.id} entityType={selectedPost ? 'post' : 'page'} />
                 </div>
             ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center text-center opacity-80 pointer-events-none">

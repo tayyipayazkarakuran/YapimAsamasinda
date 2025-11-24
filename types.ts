@@ -18,6 +18,7 @@ export interface Category {
 export interface BlogPost {
   id: string;
   title: string;
+  slug?: string;
   excerpt: string;
   content: string;
   date: string;
@@ -33,6 +34,7 @@ export interface Page {
   slug: string;
   content: string;
   created_at: string;
+  is_visible?: boolean;
 }
 
 export interface Comment {
