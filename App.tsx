@@ -125,7 +125,7 @@ const App: React.FC = () => {
           
           {message && (
              <div className="text-xs text-green-400 mt-2 animate-bounce font-bold tracking-widest">
-                > {message}
+                &gt; {message}
              </div>
           )}
 
