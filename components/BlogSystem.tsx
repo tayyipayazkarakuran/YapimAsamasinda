@@ -18,7 +18,7 @@ interface BlogSystemProps {
 
 marked.use({ breaks: true, gfm: true });
 
-// --- TOAST NOTIFICATION SYSTEM ---
+// --- TOAST NOTIFICATION SYSTEM (CENTERED MODAL STYLE) ---
 interface Toast {
   id: number;
   message: string;
@@ -26,19 +26,53 @@ interface Toast {
 }
 
 const ToastContainer: React.FC<{ toasts: Toast[] }> = ({ toasts }) => {
+  if (toasts.length === 0) return null;
+  
+  // Sadece en son gelen mesajı göster (üst üste binmemesi için)
+  const latestToast = toasts[toasts.length - 1];
+
   return (
-    <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none">
-      {toasts.map(t => (
-        <div key={t.id} className={`pointer-events-auto min-w-[300px] border-l-4 p-4 font-mono text-xs shadow-[0_0_10px_rgba(0,0,0,0.5)] animate-in slide-in-from-right duration-300 bg-black ${
-          t.type === 'success' ? 'border-green-500 text-green-400' : 
-          t.type === 'error' ? 'border-red-500 text-red-400' : 'border-blue-500 text-blue-400'
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none animate-in fade-in duration-200">
+      <div className={`pointer-events-auto relative max-w-md w-[90%] p-1 border-2 bg-black/90 shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-200 ${
+          latestToast.type === 'success' ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.2)]' : 
+          latestToast.type === 'error' ? 'border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.2)]' : 
+          'border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.2)]'
         }`}>
-          <div className="font-bold mb-1 uppercase">
-            {t.type === 'success' ? '>> İŞLEM BAŞARILI' : t.type === 'error' ? '>> SİSTEM HATASI' : '>> BİLGİ'}
+          
+          {/* Retro Header Bar */}
+          <div className={`flex justify-between items-center px-4 py-2 border-b ${
+            latestToast.type === 'success' ? 'bg-green-900/30 border-green-500 text-green-400' :
+            latestToast.type === 'error' ? 'bg-red-900/30 border-red-500 text-red-400' :
+            'bg-blue-900/30 border-blue-500 text-blue-400'
+          }`}>
+             <span className="font-bold font-mono text-xs uppercase tracking-widest flex items-center gap-2">
+                {latestToast.type === 'success' && <span>[ OK ]</span>}
+                {latestToast.type === 'error' && <span>[ ERR ]</span>}
+                {latestToast.type === 'info' && <span>[ INFO ]</span>}
+                {latestToast.type === 'success' ? 'İŞLEM BAŞARILI' : latestToast.type === 'error' ? 'SİSTEM HATASI' : 'SİSTEM MESAJI'}
+             </span>
+             <div className="w-2 h-2 rounded-full bg-current animate-pulse shadow-[0_0_5px_currentColor]"></div>
           </div>
-          <div>{t.message}</div>
-        </div>
-      ))}
+
+          {/* Content Body */}
+          <div className="px-8 py-8 text-center flex flex-col items-center justify-center min-h-[120px]">
+             <p className="font-mono text-white text-sm md:text-lg leading-relaxed tracking-wide">
+               {latestToast.message}
+             </p>
+          </div>
+
+          {/* Footer Info */}
+          <div className="px-2 py-1 flex justify-between text-[8px] font-mono text-gray-500 uppercase border-t border-white/10 bg-black">
+             <span>MSG_ID: {latestToast.id.toString().slice(-6)}</span>
+             <span>AUTO_CLOSE_SEQUENCE_INIT...</span>
+          </div>
+
+          {/* Decorative Corners */}
+          <div className="absolute top-0 left-0 w-2 h-2 border-t-2 border-l-2 border-white opacity-50"></div>
+          <div className="absolute top-0 right-0 w-2 h-2 border-t-2 border-r-2 border-white opacity-50"></div>
+          <div className="absolute bottom-0 left-0 w-2 h-2 border-b-2 border-l-2 border-white opacity-50"></div>
+          <div className="absolute bottom-0 right-0 w-2 h-2 border-b-2 border-r-2 border-white opacity-50"></div>
+      </div>
     </div>
   );
 };
@@ -370,6 +404,7 @@ const Editor: React.FC<{
     } else {
         payload.created_at = initialData?.created_at || new Date().toISOString();
         payload.is_visible = isVisible;
+        if (categoryId) payload.category_id = categoryId;
     }
 
     onSave(payload);
@@ -470,8 +505,9 @@ const CategoryManager: React.FC<{ notify: (m:string, t:'success'|'error')=>void 
         if (data) setCategories(data);
     };
     const handleAdd = async () => {
-        if (!newCat) return;
-        const { error } = await supabase.from('categories').insert([{ name: newCat, slug: newCat.toLowerCase().replace(/ /g, '-') }]);
+        if (!newCat.trim()) return;
+        const slug = newCat.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+        const { error } = await supabase.from('categories').insert([{ name: newCat.trim(), slug: slug }]);
         if(error) notify(error.message, 'error');
         else {
           notify('Kategori Eklendi', 'success');
@@ -619,6 +655,9 @@ alter table public.posts add column if not exists category_id uuid references pu
 alter table public.posts add column if not exists slug text;
 
 alter table public.pages add column if not exists is_visible boolean default true;
+alter table public.pages add column if not exists category_id uuid references public.categories(id);
+
+alter table public.categories add column if not exists slug text;
   `.trim();
 
   const sqlPermissions = `

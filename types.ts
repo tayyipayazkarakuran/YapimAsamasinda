@@ -35,6 +35,7 @@ export interface Page {
   content: string;
   created_at: string;
   is_visible?: boolean;
+  category_id?: string;
 }
 
 export interface Comment {
