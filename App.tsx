@@ -80,10 +80,6 @@ const App: React.FC = () => {
           document.head.appendChild(metaDesc);
         }
         metaDesc.setAttribute('content', data.site_description || '');
-
-        // Update Robots
-        // (Usually handled by server, but we can simulate for SPA)
-        console.log('Robots Config Loaded:', data.robots_txt);
       }
     };
 
@@ -104,6 +100,16 @@ const App: React.FC = () => {
     setEmail('');
     emailInputRef.current?.focus();
   };
+
+  // Helper to safely get title string
+  const getSafeTitle = () => {
+    if (siteConfig && typeof siteConfig.site_title === 'string' && siteConfig.site_title.length > 0) {
+      return siteConfig.site_title;
+    }
+    return "YAPIM AŞAMASINDA";
+  };
+  
+  const displayTitle = getSafeTitle();
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden flex flex-col font-mono text-white selection:bg-white selection:text-black">
@@ -155,14 +161,20 @@ const App: React.FC = () => {
             {/* Glitch Title */}
             <div className="relative inline-block mb-4 group select-none">
               <h1 className="relative z-10 text-4xl md:text-6xl lg:text-8xl font-black font-['Syncopate'] tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-                {siteConfig?.site_title ? siteConfig.site_title.split(' ').map((word, i) => <span key={i} className="block md:inline-block mr-4">{word}</span>) : <>YAPIM<br />AŞAMASINDA</>}
+                {displayTitle.split(' ').map((word, i) => (
+                  <span key={i} className="block md:inline-block mr-4">{word}</span>
+                ))}
               </h1>
               
               <h1 className="glitch-layer absolute top-0 left-0 w-full h-full text-red-500 opacity-70 z-0 pointer-events-none" aria-hidden="true">
-                 {siteConfig?.site_title || <>YAPIM<br />AŞAMASINDA</>}
+                 {displayTitle.split(' ').map((word, i) => (
+                  <span key={i} className="block md:inline-block mr-4">{word}</span>
+                ))}
               </h1>
               <h1 className="glitch-layer-2 absolute top-0 left-0 w-full h-full text-cyan-400 opacity-70 z-0 pointer-events-none" aria-hidden="true">
-                 {siteConfig?.site_title || <>YAPIM<br />AŞAMASINDA</>}
+                 {displayTitle.split(' ').map((word, i) => (
+                  <span key={i} className="block md:inline-block mr-4">{word}</span>
+                ))}
               </h1>
 
               <style>{`
