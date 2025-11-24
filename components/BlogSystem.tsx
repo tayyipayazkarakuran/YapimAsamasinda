@@ -1,36 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { BlogPost } from '../types';
 
-// Mock Data for initial load
-const INITIAL_POSTS: BlogPost[] = [
-  {
-    id: '1',
-    title: 'DİJİTAL MİMARİNİN DOĞUŞU',
-    excerpt: 'Sıfırlar ve birler arasında yeni bir dünya inşa ediyoruz.',
-    content: `Geleneksel mimari, yerçekimi ve malzeme bilimiyle sınırlıdır. Ancak dijital evrende, tek sınır hayal gücümüz ve işlemci gücüdür. 
+// --- SUPABASE CONFIGURATION ---
+// LÜTFEN BURAYI KENDİ SUPABASE PROJE BİLGİLERİNİZLE DOLDURUN
+const SUPABASE_URL = 'https://cjztgxndnfjdvzlfhvxt.supabase.co'; 
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqenRneG5kbmZqZHZ6bGZodnh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM5NDExMjksImV4cCI6MjA3OTUxNzEyOX0.fBwLYwJIRMmwjrs0fsxDeqt89oqhI_uIq8UrXdL3bDA'; 
 
-Karakuran.com projesi, bu sınırsızlığı retro bir estetikle harmanlayarak, geçmişin gelecek vizyonunu bugünün teknolojisiyle sunmayı amaçlıyor.
-
-Bu sistem, HTML5 ve React teknolojileri kullanılarak, eski CRT monitörlerin ruhunu modern web tarayıcılarına taşıyor.`,
-    date: '2023-10-24',
-    author: 'KARAKURAN',
-    readTime: '3 DAK'
-  },
-  {
-    id: '2',
-    title: 'SİSTEM GÜNCELLEMESİ V.1.0',
-    excerpt: 'Kernel seviyesinde yapılan iyileştirmeler ve yeni görsel modüller.',
-    content: `Sistem çekirdeğinde yapılan son güncellemeler ile birlikte render motoru %40 daha verimli çalışıyor.
-
-YENİLİKLER:
-- 3D Küp render optimizasyonu.
-- Gezegen yörünge hesaplamaları düzeltildi.
-- Blog modülü eklendi.`,
-    date: '2023-10-25',
-    author: 'SYSTEM',
-    readTime: '1 DAK'
-  }
-];
+// Initialize Client
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 interface BlogSystemProps {
   onBack: () => void;
@@ -38,12 +16,34 @@ interface BlogSystemProps {
 
 // --- SUB-COMPONENTS ---
 
+// Warning component if keys are missing
+const ConfigWarning: React.FC = () => (
+  <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center p-8">
+    <div className="border-2 border-red-500 p-8 max-w-2xl text-center font-mono">
+      <h1 className="text-3xl text-red-500 font-bold mb-4 animate-pulse">SİSTEM HATASI: VERİTABANI BAĞLANTISI YOK</h1>
+      <p className="text-white mb-6">
+        Supabase bağlantı bilgileri eksik. Lütfen <code>components/BlogSystem.tsx</code> dosyasını açın ve
+        <code>SUPABASE_URL</code> ile <code>SUPABASE_KEY</code> alanlarını kendi proje bilgilerinizle doldurun.
+      </p>
+      <div className="bg-gray-900 p-4 rounded text-left text-xs text-green-400 overflow-x-auto">
+        <p>// components/BlogSystem.tsx</p>
+        <p>const SUPABASE_URL = 'https://xyz.supabase.co';</p>
+        <p>const SUPABASE_KEY = 'eyJh...';</p>
+      </div>
+      <button onClick={() => window.location.reload()} className="mt-8 bg-red-600 text-white px-6 py-2 hover:bg-red-700">
+        SAYFAYI YENİLE
+      </button>
+    </div>
+  </div>
+);
+
 // 1. Post Editor (Admin)
 const Editor: React.FC<{ 
   post?: BlogPost | null; 
-  onSave: (post: BlogPost) => void; 
+  onSave: (post: Omit<BlogPost, 'id'> & { id?: string }) => void; 
   onCancel: () => void; 
-}> = ({ post, onSave, onCancel }) => {
+  isSaving: boolean;
+}> = ({ post, onSave, onCancel, isSaving }) => {
   const [title, setTitle] = useState(post?.title || '');
   const [content, setContent] = useState(post?.content || '');
   const [excerpt, setExcerpt] = useState(post?.excerpt || '');
@@ -51,7 +51,7 @@ const Editor: React.FC<{
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
-      id: post?.id || Date.now().toString(),
+      id: post?.id, // undefined if new
       title,
       content,
       excerpt,
@@ -111,8 +111,12 @@ const Editor: React.FC<{
           <button type="button" onClick={onCancel} className="text-gray-500 hover:text-white transition-colors text-xs font-mono tracking-widest px-4 py-2 border border-transparent hover:border-gray-600">
             [ İPTAL ET ]
           </button>
-          <button type="submit" className="bg-white text-black px-8 py-2 font-bold hover:bg-gray-300 transition-colors text-xs font-mono tracking-widest border border-white">
-            [ VERİYİ KAYDET ]
+          <button 
+            type="submit" 
+            disabled={isSaving}
+            className="bg-white text-black px-8 py-2 font-bold hover:bg-gray-300 transition-colors text-xs font-mono tracking-widest border border-white disabled:opacity-50 flex items-center gap-2"
+          >
+            {isSaving ? <span className="animate-spin">/</span> : '[ VERİYİ KAYDET ]'}
           </button>
         </div>
       </form>
@@ -157,7 +161,6 @@ const AdminLogin: React.FC<{ onLogin: () => void; onCancel: () => void }> = ({ o
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Hardcoded credentials as requested
     if (username === 'Karakuran' && password === 'Taytapo123*') {
       onLogin();
     } else {
@@ -223,39 +226,94 @@ const AdminLogin: React.FC<{ onLogin: () => void; onCancel: () => void }> = ({ o
 
 const BlogSystem: React.FC<BlogSystemProps> = ({ onBack }) => {
   const [view, setView] = useState<'list' | 'post' | 'admin'>('list');
-  const [posts, setPosts] = useState<BlogPost[]>(INITIAL_POSTS);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
   const [selectedPost, setSelectedPost] = useState<BlogPost | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isEditing, setIsEditing] = useState(false); // Creating or Editing in Admin
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Load from local storage on mount
+  // Initial Fetch
   useEffect(() => {
-    const saved = localStorage.getItem('karakuran_posts');
-    if (saved) {
-      setPosts(JSON.parse(saved));
-    }
+    fetchPosts();
   }, []);
 
-  // Save to local storage on change
-  useEffect(() => {
-    localStorage.setItem('karakuran_posts', JSON.stringify(posts));
-  }, [posts]);
+  const fetchPosts = async () => {
+    setLoading(true);
+    // Don't try to fetch if config is default
+    if (SUPABASE_URL.includes('YOUR_PROJECT_ID')) {
+      setLoading(false);
+      return;
+    }
 
-  const handleSavePost = (post: BlogPost) => {
-    if (posts.find(p => p.id === post.id)) {
-      setPosts(posts.map(p => p.id === post.id ? post : p));
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*')
+      .order('date', { ascending: false });
+
+    if (error) {
+      console.error('Supabase Error:', error.message);
     } else {
-      setPosts([post, ...posts]);
+      setPosts(data || []);
     }
-    setIsEditing(false);
-    setSelectedPost(null); // Reset selection
+    setLoading(false);
   };
 
-  const handleDeletePost = (id: string) => {
-    if (window.confirm('Bu veriyi kalıcı olarak silmek istediğinize emin misiniz?')) {
-      setPosts(posts.filter(p => p.id !== id));
+  const handleSavePost = async (postData: Omit<BlogPost, 'id'> & { id?: string }) => {
+    setIsSaving(true);
+    
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id, ...dataToSave } = postData;
+
+    try {
+      if (postData.id) {
+        // Update existing
+        const { error } = await supabase
+          .from('posts')
+          .update(dataToSave)
+          .eq('id', postData.id);
+        
+        if (error) throw error;
+      } else {
+        // Create new
+        const { error } = await supabase
+          .from('posts')
+          .insert([dataToSave]);
+          
+        if (error) throw error;
+      }
+
+      await fetchPosts(); // Refresh list
+      setIsEditing(false);
+      setSelectedPost(null);
+    } catch (error: any) {
+      alert(`HATA: ${error.message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
+
+  const handleDeletePost = async (id: string) => {
+    if (window.confirm('Bu veriyi kalıcı olarak veritabanından silmek istediğinize emin misiniz?')) {
+      setLoading(true);
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        alert('Silme işlemi başarısız: ' + error.message);
+      } else {
+        await fetchPosts();
+      }
+      setLoading(false);
+    }
+  };
+
+  // Show warning if user hasn't configured the keys
+  if (SUPABASE_URL.includes('YOUR_PROJECT_ID')) {
+    return <ConfigWarning />;
+  }
 
   return (
     <div className="relative w-full min-h-screen z-50 pt-24 px-4 pb-12 overflow-y-auto bg-black/50">
@@ -295,65 +353,82 @@ const BlogSystem: React.FC<BlogSystemProps> = ({ onBack }) => {
       {/* CONTENT AREA */}
       <div className="max-w-5xl mx-auto">
         
+        {loading && !isEditing && view === 'list' && (
+          <div className="text-center py-20 font-mono animate-pulse text-green-500">
+            &gt; BULUT BAĞLANTISI KURULUYOR...
+            <br/>
+            &gt; VERİLER İNDİRİLİYOR...
+          </div>
+        )}
+
+        {!loading && posts.length === 0 && !isEditing && view === 'list' && (
+           <div className="text-center py-20 font-mono text-gray-500 border border-white/10 border-dashed">
+              [ HİÇBİR VERİ GİRİŞİ BULUNAMADI ]
+           </div>
+        )}
+        
         {isEditing && isAdmin ? (
           <Editor 
             post={selectedPost} 
             onSave={handleSavePost} 
             onCancel={() => { setIsEditing(false); setSelectedPost(null); }} 
+            isSaving={isSaving}
           />
         ) : view === 'post' && selectedPost ? (
           <BlogPostView post={selectedPost} onBack={() => { setView('list'); setSelectedPost(null); }} />
         ) : (
           /* POST LIST */
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {posts.map(post => (
-              <div 
-                key={post.id} 
-                className="group relative border border-white/20 bg-black/40 hover:bg-white/10 transition-all duration-300 p-6 flex flex-col justify-between min-h-[250px] cursor-pointer"
-                onClick={() => { setSelectedPost(post); setView('post'); }}
-              >
-                {/* Decorative Corners */}
-                <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-white opacity-30 group-hover:opacity-100 transition-opacity" />
-                <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-white opacity-30 group-hover:opacity-100 transition-opacity" />
-                <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-white opacity-30 group-hover:opacity-100 transition-opacity" />
-                <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-white opacity-30 group-hover:opacity-100 transition-opacity" />
+          !loading && view === 'list' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {posts.map(post => (
+                <div 
+                  key={post.id} 
+                  className="group relative border border-white/20 bg-black/40 hover:bg-white/10 transition-all duration-300 p-6 flex flex-col justify-between min-h-[250px] cursor-pointer"
+                  onClick={() => { setSelectedPost(post); setView('post'); }}
+                >
+                  {/* Decorative Corners */}
+                  <div className="absolute top-0 left-0 w-2 h-2 border-t border-l border-white opacity-30 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-white opacity-30 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-white opacity-30 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-white opacity-30 group-hover:opacity-100 transition-opacity" />
 
-                <div>
-                  <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
-                    <span className="font-mono text-xs text-green-500 tracking-wider">ENTRY_#{post.id}</span>
-                    <span className="font-mono text-xs text-gray-500">{post.date}</span>
-                  </div>
-                  <h3 className="text-2xl font-['Syncopate'] font-bold leading-tight mb-3 group-hover:text-white text-gray-200 transition-colors">
-                    {post.title}
-                  </h3>
-                  <p className="text-gray-400 text-sm font-light line-clamp-3 font-mono">
-                    {post.excerpt}
-                  </p>
-                </div>
-
-                <div className="flex justify-between items-end mt-6">
-                  <span className="text-xs text-gray-600 group-hover:text-white transition-colors font-mono tracking-widest">OKU &gt;&gt;</span>
-                  
-                  {isAdmin && (
-                    <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-                      <button 
-                        onClick={() => { setSelectedPost(post); setIsEditing(true); }}
-                        className="text-xs border border-white/30 text-white hover:bg-white hover:text-black px-2 py-1 transition-colors font-mono"
-                      >
-                        DÜZENLE
-                      </button>
-                      <button 
-                        onClick={() => handleDeletePost(post.id)}
-                        className="text-xs border border-red-900/50 text-red-500 hover:bg-red-600 hover:text-white px-2 py-1 transition-colors font-mono"
-                      >
-                        SİL
-                      </button>
+                  <div>
+                    <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2">
+                      <span className="font-mono text-xs text-green-500 tracking-wider">ENTRY_#{post.id.substring(0,6)}</span>
+                      <span className="font-mono text-xs text-gray-500">{post.date}</span>
                     </div>
-                  )}
+                    <h3 className="text-2xl font-['Syncopate'] font-bold leading-tight mb-3 group-hover:text-white text-gray-200 transition-colors">
+                      {post.title}
+                    </h3>
+                    <p className="text-gray-400 text-sm font-light line-clamp-3 font-mono">
+                      {post.excerpt}
+                    </p>
+                  </div>
+
+                  <div className="flex justify-between items-end mt-6">
+                    <span className="text-xs text-gray-600 group-hover:text-white transition-colors font-mono tracking-widest">OKU &gt;&gt;</span>
+                    
+                    {isAdmin && (
+                      <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                        <button 
+                          onClick={() => { setSelectedPost(post); setIsEditing(true); }}
+                          className="text-xs border border-white/30 text-white hover:bg-white hover:text-black px-2 py-1 transition-colors font-mono"
+                        >
+                          DÜZENLE
+                        </button>
+                        <button 
+                          onClick={() => handleDeletePost(post.id)}
+                          className="text-xs border border-red-900/50 text-red-500 hover:bg-red-600 hover:text-white px-2 py-1 transition-colors font-mono"
+                        >
+                          SİL
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )
         )}
       </div>
     </div>
